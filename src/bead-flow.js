@@ -1,14 +1,16 @@
-const steps = 24;
+const steps = 96;
+const timeStep = 24 / steps;
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 // A reduced Bingham-flow model along a deposited bead. Lengths are expressed
 // in nozzle diameters. The slider sets relative yield stress and mobility.
-export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, unsupportedLength, closed }) {
+export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, unsupportedLength, closed, edgeAreas }) {
   const count = path.length;
   const edgeCount = closed ? count : count - 1;
   const edges = new Float64Array(count);
   const cellLength = new Float64Array(count);
+  const volume = new Float64Array(count);
   for (let i = 0; i < edgeCount; i++) {
     const j = (i + 1) % count;
     const a = path[i];
@@ -17,12 +19,14 @@ export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, uns
     edges[i] = length;
     cellLength[i] += length / 2;
     cellLength[j] += length / 2;
+    const deposited = length * (edgeAreas?.[i] ?? 1) / 2;
+    volume[i] += deposited;
+    volume[j] += deposited;
   }
 
   const referenceHeight = new Float64Array(count);
   const availableDrop = new Float64Array(count);
   const weight = new Float64Array(count);
-  const volume = cellLength.slice();
   const freeSurface = new Float64Array(count);
   const thickness = new Float64Array(count);
   const volumeChange = new Float64Array(count);
@@ -31,7 +35,7 @@ export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, uns
 
   const footprintHeight = Math.max(buildHeight, diameter);
   const yieldStress = 0.045 + 0.62 * (1 - softness) ** 2;
-  const mobility = 0.27 * softness ** 0.72;
+  const mobility = 0.27 * softness ** 0.72 * timeStep;
   const beadHeight = 0.88 - 0.16 * softness;
 
   for (let i = 0; i < count; i++) {
@@ -53,7 +57,8 @@ export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, uns
 
       const before = i > 0 ? i - 1 : (closed ? count - 1 : i);
       const after = i < count - 1 ? i + 1 : (closed ? 0 : i);
-      const cohesion = 0.4 * ((drop[before] + drop[after]) / 2 - drop[i]);
+      const smoothing = 0.4 / Math.max(0.18, cellLength[i] * 2);
+      const cohesion = smoothing * ((drop[before] + drop[after]) / 2 - drop[i]);
       const support = 0.86 * drop[i] / availableDrop[i];
       const load = weight[i] * area - support + cohesion;
       const strainRate = Math.sign(load) * Math.max(0, Math.abs(load) - yieldStress);
@@ -74,8 +79,8 @@ export function solveBeadFlow(path, { diameter, buildHeight, softness, gaps, uns
       const flux = mobility * thickness[donor] ** 3 * Math.abs(slope) * yielded * 0.35;
       const transfer = Math.max(0, Math.min(
         flux,
-        (volume[donor] - 0.68 * cellLength[donor]) * 0.18,
-        (1.42 * cellLength[receiver] - volume[receiver]) * 0.18,
+        (volume[donor] - 0.3 * cellLength[donor]) * 0.12,
+        (2.15 * cellLength[receiver] - volume[receiver]) * 0.12,
       ));
       volumeChange[donor] -= transfer;
       volumeChange[receiver] += transfer;

@@ -23,11 +23,16 @@ function radiusAt(height) {
 
 export function makeSample() {
   const lines = ['; Dr. FixBoi®’s sample vase', 'G21', 'G90', 'M83', 'G0 X0 Y0 Z1.0', 'G1 F1200'];
-  const add = (radius, angle, height, e) => {
-    lines.push(`G1 X${(radius * Math.cos(angle)).toFixed(3)} Y${(radius * Math.sin(angle)).toFixed(3)} Z${height.toFixed(3)} E${e}`);
+  let previous = [0, 0, 1];
+  const add = (radius, angle, height) => {
+    const coordinates = [radius * Math.cos(angle), radius * Math.sin(angle), height].map(value => value.toFixed(3));
+    const [x, y, z] = coordinates;
+    const length = Math.hypot(...coordinates.map((value, axis) => Number(value) - previous[axis]));
+    lines.push(`G1 X${x} Y${y} Z${z} E${(length * 0.09).toFixed(5)}`);
+    previous = coordinates.map(Number);
   };
   const seedSteps = 7 * 86;
-  for (let i = 1; i <= seedSteps; i++) add(18.5 * i / seedSteps, tau * i / 86, 1, '0.045');
+  for (let i = 1; i <= seedSteps; i++) add(18.5 * i / seedSteps, tau * i / 86, 1);
   const pointsPerTurn = 144;
   const turns = 62;
   for (let i = 1; i <= turns * pointsPerTurn; i++) {
@@ -35,7 +40,7 @@ export function makeSample() {
     const angle = tau * i / pointsPerTurn;
     const fluting = (0.23 + 2.0 * Math.sin(Math.PI * height) ** 2) * Math.sin(11 * angle + height * 9);
     const ripple = 0.65 * Math.sin(angle * 3 - height * 4) * height;
-    add(radiusAt(height) + fluting + ripple, angle, 1 + 95 * height, '0.12');
+    add(radiusAt(height) + fluting + ripple, angle, 1 + 95 * height);
   }
   lines.push('G0 Z110', 'M2', '');
   return lines.join('\n');

@@ -100,7 +100,6 @@ export function createViewer(container, axes, drafting) {
   const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 10_000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   let pixelRatio = Math.min(window.devicePixelRatio, 1.25);
-  let renderQuality = 'fast';
   renderer.setPixelRatio(pixelRatio);
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
@@ -132,6 +131,8 @@ export function createViewer(container, axes, drafting) {
   key.shadow.bias = -0.0001;
   key.shadow.radius = 5;
   scene.add(key.target);
+  const keySamples = [];
+  const studioAccents = [];
 
   const grid = floorGrid();
   const shadow = floorShadow();
@@ -153,8 +154,7 @@ export function createViewer(container, axes, drafting) {
   printedDepth.renderOrder = 2;
   printedGhost.renderOrder = 3;
   printedDepth.visible = printedGhost.visible = false;
-  let clayMaterial;
-  let studioEnvironment;
+  const studioTiers = new Map();
   let studioFloor;
   clay.visible = false;
   scene.add(clay, printedDepth, printedGhost);
@@ -275,20 +275,24 @@ export function createViewer(container, axes, drafting) {
     if (!renderer.shadowMap.enabled) return;
 
     studioFloor.position.y = -extent * 0.00035;
-    key.target.position.set(0, size.y * scale * 0.38, 0);
-    key.position.copy(key.target.position).addScaledVector(keyDirection, extent * 3);
-    const camera = key.shadow.camera;
     const range = extent * 1.35;
-    camera.left = camera.bottom = -range;
-    camera.right = camera.top = range;
-    camera.near = extent;
-    camera.far = extent * 5;
-    camera.updateProjectionMatrix();
-    key.shadow.normalBias = extent * 0.0012;
+    key.target.position.set(0, size.y * scale * 0.38, 0);
+    for (const { source, direction } of [{ source: key, direction: keyDirection }, ...keySamples]) {
+      if (!source.visible) continue;
+      source.position.copy(key.target.position).addScaledVector(direction, extent * 3);
+      const camera = source.shadow.camera;
+      camera.left = camera.bottom = -range;
+      camera.right = camera.top = range;
+      camera.near = extent;
+      camera.far = extent * 5;
+      camera.updateProjectionMatrix();
+      source.shadow.normalBias = extent * 0.0012;
+    }
     renderer.shadowMap.needsUpdate = true;
   }
 
   function setScale(scale) {
+    if (clay.scale.x === scale) return;
     clay.scale.setScalar(scale);
     if (clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     render();
@@ -320,22 +324,6 @@ export function createViewer(container, axes, drafting) {
     updateDraftingView();
   }
 
-  function setQuality(quality) {
-    if (quality === renderQuality) return;
-    renderQuality = quality;
-    const accurate = quality === 'accurate';
-    pixelRatio = accurate ? Math.min(window.devicePixelRatio * 1.35, 2) : Math.min(window.devicePixelRatio, 1.25);
-    renderer.setPixelRatio(pixelRatio);
-
-    const resolution = accurate ? 2048 : 1024;
-    key.shadow.map?.dispose();
-    key.shadow.map = null;
-    key.shadow.mapSize.set(resolution, resolution);
-    key.shadow.radius = accurate ? 10 : 5;
-    renderer.shadowMap.needsUpdate = true;
-    resize();
-  }
-
   function zoom(amount) {
     if (!clay.visible) return;
     const direction = camera.position.clone().sub(controls.target);
@@ -344,36 +332,80 @@ export function createViewer(container, axes, drafting) {
     controls.update();
   }
 
-  function setAppearance(finish) {
-    if (finish) {
-      clayMaterial ??= createClayMaterial();
-      if (!studioEnvironment) {
-        const room = new RoomEnvironment();
-        const pmrem = new THREE.PMREMGenerator(renderer);
-        studioEnvironment = pmrem.fromScene(room, 0.04);
-        pmrem.dispose();
-        room.dispose();
-        studioFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createCanvasMaterial());
+  function getStudioTier(high) {
+    if (!studioTiers.has(high)) {
+      const room = new RoomEnvironment();
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const environment = pmrem.fromScene(room, high ? 0.025 : 0.04, 0.1, 100, { size: high ? 512 : 256 });
+      pmrem.dispose();
+      room.dispose();
+      studioTiers.set(high, { environment, clay: createClayMaterial(high), canvas: createCanvasMaterial(high) });
+    }
+    return studioTiers.get(high);
+  }
+
+  function configureRenderQuality(high) {
+    const resolution = high ? 2048 : 1024;
+    if (key.shadow.mapSize.x !== resolution) {
+      key.shadow.map?.dispose();
+      key.shadow.map = null;
+      key.shadow.mapSize.set(resolution, resolution);
+    }
+    key.shadow.radius = high ? 8 : 5;
+
+    // Sample a finite softbox for gradual shadow edges at high quality.
+    if (high && !keySamples.length) {
+      const horizontal = new THREE.Vector3(0, 1, 0).cross(keyDirection).normalize();
+      const vertical = keyDirection.clone().cross(horizontal);
+      for (const [x, y] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+        const source = light('#fff9ee', 2.3 * 0.19, 0, 0, 0);
+        source.target = key.target;
+        source.shadow.mapSize.set(1024, 1024);
+        source.shadow.radius = 5;
+        source.shadow.bias = key.shadow.bias;
+        const direction = keyDirection.clone().addScaledVector(horizontal, x * 0.105)
+          .addScaledVector(vertical, y * 0.075).normalize();
+        keySamples.push({ source, direction });
+      }
+      studioAccents.push(light('#eaf2ff', 0.26, -1, 5, -3), light('#ffe8d0', 0.17, 5, 1, -3));
+    }
+    for (const source of studioAccents) source.visible = high;
+    for (const { source } of keySamples) {
+      source.visible = source.castShadow = high;
+      if (!high && source.shadow.map) {
+        source.shadow.map.dispose();
+        source.shadow.map = null;
+      }
+    }
+  }
+
+  function setAppearance(finish, quality) {
+    const active = Boolean(finish);
+    const high = active && quality === 'high';
+    const studio = active ? getStudioTier(high) : undefined;
+    if (studio) {
+      studio.clay.update(finish);
+      if (!studioFloor) {
+        studioFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), studio.canvas);
         studioFloor.rotation.x = -Math.PI / 2;
         studioFloor.receiveShadow = true;
         scene.add(studioFloor);
         sizeStudioFloor();
       }
-      clayMaterial.update(finish);
+      studioFloor.material = studio.canvas;
     }
-
-    const active = Boolean(finish);
-    clay.material = active ? clayMaterial.material : previewMaterial;
+    configureRenderQuality(high);
+    clay.material = studio?.clay.material ?? previewMaterial;
     scene.background = active ? studioBackdrop : null;
     scene.fog = active ? studioFog : null;
-    scene.environment = active ? studioEnvironment.texture : null;
+    scene.environment = studio?.environment.texture ?? null;
     scene.environmentIntensity = 0.58;
     renderer.toneMapping = active ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
     ambient.color.set(active ? '#f7f5f2' : '#ffddfa');
     ambient.groundColor.set(active ? '#a69c92' : '#341649');
     ambient.intensity = active ? 0.66 : 2.05;
     key.color.set(active ? '#fff9ee' : '#fff0df');
-    key.intensity = active ? 2.3 : 2.65;
+    key.intensity = active ? 2.3 * (high ? 0.24 : 1) : 2.65;
     rim.color.set(active ? '#f7f5f2' : '#e6bbff');
     rim.intensity = active ? 0.64 : 2.0;
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
@@ -389,8 +421,15 @@ export function createViewer(container, axes, drafting) {
       key.position.set(-4, 7, 4);
       key.target.position.set(0, 0, 0);
     }
-    render();
+    const ratio = high ? Math.min(window.devicePixelRatio * 1.65, 2.5) : Math.min(window.devicePixelRatio, 1.25);
+    if (ratio !== pixelRatio) {
+      pixelRatio = ratio;
+      renderer.setPixelRatio(pixelRatio);
+      resize();
+    } else {
+      render();
+    }
   }
 
-  return { setMesh, setAppearance, setScale, setDrafting, setComparison, setQuality, zoom, reset };
+  return { setMesh, setAppearance, setScale, setDrafting, setComparison, zoom, reset };
 }

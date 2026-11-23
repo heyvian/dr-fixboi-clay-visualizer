@@ -38,7 +38,6 @@ function updateSimulationSettings() {
   settings.gravity = gravity.checked;
   settings.quality = accurate.checked ? 'accurate' : 'fast';
   saveSettings(settings);
-  viewer?.setQuality(settings.quality);
   schedulePreview();
 }
 
@@ -93,7 +92,6 @@ helpDialog.addEventListener('click', event => {
 let viewer;
 try {
   viewer = createViewer(byId('scene'), byId('axis-key'), byId('drafting'));
-  viewer.setQuality(settings.quality);
 } catch {
   sceneError.textContent = 'The 3D preview needs WebGL 2. Try a browser with hardware acceleration enabled.';
   sceneError.hidden = false;

@@ -8,7 +8,7 @@ import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
-  const { paths, inferExtrusion } = parseGcode(`
+  const { paths, inferExtrusion, extrusion } = parseGcode(`
     G21
     G90
     M82
@@ -23,6 +23,7 @@ test('draws deposited moves and restarts a bead after travel and retraction', ()
     [[12, 3, 1], [14, 3, 1]],
   ]);
   assert.equal(inferExtrusion, false);
+  assert.deepEqual(extrusion, [[1], [1]]);
 });
 
 test('tracks relative motion, extrusion mode, inches, and coordinate resets', () => {
@@ -144,6 +145,36 @@ test('Accurate adds bead detail while preserving the dimensions of the toolpath'
   assert.deepEqual(meshSize(accurate), meshSize(fast));
 });
 
+test('Accurate carries deposition spacing across collinear G-code moves', () => {
+  const settings = { nozzle: 6, viscosity: 60, gravity: true, quality: 'accurate' };
+  const whole = makeClayMesh(parseGcode('M83\nG0 Z1\nG1 X30 E3'), settings);
+  const split = makeClayMesh(parseGcode('M83\nG0 Z1\nG1 X7.5 E0.75\nG1 X21 E1.35\nG1 X30 E0.9'), settings);
+  assert.equal(split.positions.length, whole.positions.length);
+  assert.deepEqual(split.indices, whole.indices);
+  assert.ok(split.positions.every((value, i) => Math.abs(value - whole.positions[i]) < 1e-5));
+});
+
+test('Accurate uses relative extrusion to vary deposited bead width', () => {
+  const model = parseGcode('M83\nG0 Z1\nG1 X12 E0.5\nG1 X24 E1.5');
+  const settings = { nozzle: 6, viscosity: 60, gravity: false };
+  function widths(quality) {
+    const { positions } = makeClayMesh(model, { ...settings, quality });
+    const width = [0, 0];
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      if (Math.abs(x) > 3) {
+        const half = Number(x > 0);
+        width[half] = Math.max(width[half], Math.abs(positions[i + 2]));
+      }
+    }
+    return width;
+  }
+  const [fastLeft, fastRight] = widths('fast');
+  const [accurateLeft, accurateRight] = widths('accurate');
+  assert.equal(fastLeft, fastRight);
+  assert.ok(accurateRight > accurateLeft * 1.5);
+});
+
 test('fully stiff clay produces the same mesh with gravity on or off', () => {
   const model = parseGcode('G0 Z1\nG1 X20 E1\nG0 Y5 Z5\nG1 X0 E2');
   const settings = { nozzle: 6, viscosity: 100, quality: 'accurate' };
@@ -235,9 +266,10 @@ test('restores saved controls and uses Fast for a first visit', () => {
   assert.equal(settings.quality, 'fast');
   assert.equal(settings.body, 'darkGranite');
   assert.equal(settings.finish, 'greenware');
+  assert.equal(settings.renderQuality, 'low');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
-    body: 'm390', finish: 'fired', rendering: true, drafting: true, comparing: true,
+    body: 'm390', finish: 'fired', rendering: true, renderQuality: 'high', drafting: true, comparing: true,
   };
   assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(saved))), saved);
   assert.deepEqual(normalizeSettings({ nozzle: 70, quality: 'other', body: '__proto__' }), settings);

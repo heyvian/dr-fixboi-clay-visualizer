@@ -16,6 +16,7 @@ export function normalizeSettings(saved) {
     body: Object.hasOwn(clayBodies, values.body) ? values.body : 'darkGranite',
     finish: values.finish === 'fired' ? 'fired' : 'greenware',
     rendering: values.rendering === true,
+    renderQuality: values.renderQuality === 'high' ? 'high' : 'low',
     drafting: values.drafting === true,
     comparing: values.comparing === true,
   };

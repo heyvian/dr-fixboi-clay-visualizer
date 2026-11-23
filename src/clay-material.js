@@ -54,12 +54,28 @@ vec3 fleckCenter = 0.26 + 0.48 * vec3(
 float fleckRadius = mix(0.13, 0.26, clayHash(fleckCell + 7.0));
 float fleck = occupied * (1.0 - smoothstep(fleckRadius - 0.065, fleckRadius, length(fract(fleckPoint) - fleckCenter)));
 fleck *= clayDetailVisibility(fleckPoint);
-diffuseColor.rgb *= 1.0 + uClayGrain * (variation * 2.0 + grain * 2.7);
+float bump = grain + 0.22 * variation;
+float surfaceRoughness = grain * 2.4;
+float clayTone = variation * 2.0 + grain * 2.7;
+#ifdef HIGH_SURFACE_DETAIL
+  vec3 aggregatePoint = vClayPosition * 0.52;
+  float aggregate = clayNoise(aggregatePoint) - 0.5;
+  vec3 porePoint = vClayPosition * 5.4;
+  float pores = smoothstep(0.12, 0.32, clayNoise(porePoint)) - 1.0;
+  pores *= clayDetailVisibility(porePoint);
+  vec3 gritPoint = vClayPosition * 10.8;
+  float grit = (clayNoise(gritPoint) - 0.5) * clayDetailVisibility(gritPoint);
+  bump += 0.28 * aggregate + 0.32 * pores + 0.11 * grit;
+  surfaceRoughness += 0.80 * aggregate - 0.70 * pores + 0.35 * grit;
+  clayTone += 0.80 * aggregate + 0.82 * pores + 0.36 * grit;
+#endif
+diffuseColor.rgb *= 1.0 + uClayGrain * clayTone;
 diffuseColor.rgb = mix(diffuseColor.rgb, uFleckColor, fleck);
 `;
 
-export function createClayMaterial() {
+export function createClayMaterial(high) {
   const material = new MeshPhysicalMaterial({ metalness: 0, ior: 1.48, side: DoubleSide });
+  if (high) material.defines.HIGH_SURFACE_DETAIL = 1;
   const uniforms = {
     uClayGrain: { value: 0 },
     uFleckDensity: { value: 0 },
@@ -77,11 +93,11 @@ export function createClayMaterial() {
       .replace('#include <color_fragment>', applyClayColor)
       .replace('#include <roughnessmap_fragment>', `
         #include <roughnessmap_fragment>
-        roughnessFactor = clamp(roughnessFactor + grain * uClayGrain * 2.4, 0.35, 1.0);
+        roughnessFactor = clamp(roughnessFactor + surfaceRoughness * uClayGrain, 0.35, 1.0);
       `)
       .replace('#include <normal_fragment_maps>', `
         #include <normal_fragment_maps>
-        normal = surfaceBumpNormal(-vViewPosition, normal, uClayGrain * (grain + 0.22 * variation), faceDirection);
+        normal = surfaceBumpNormal(-vViewPosition, normal, uClayGrain * bump, faceDirection);
       `);
   };
 

@@ -104,7 +104,7 @@
             </div>
 
             <div class="setting gravity-setting">
-              <label class="gravity-control" for="gravity">
+              <label class="switch-control" for="gravity">
                 <span><span class="setting-label">Simulate gravity</span><span class="setting-note">Add sag and compression.</span></span>
                 <input id="gravity" type="checkbox" role="switch" checked>
                 <span class="toggle" aria-hidden="true"></span>
@@ -112,12 +112,12 @@
             </div>
 
             <div class="setting quality-setting">
-              <span id="quality-title" class="setting-label">Preview quality</span>
+              <span id="quality-title" class="setting-label">Simulation quality</span>
               <div id="quality" class="quality-choices" role="radiogroup" aria-labelledby="quality-title" aria-describedby="quality-note">
                 <label><input type="radio" name="quality" value="fast" checked><span>Fast</span></label>
                 <label><input type="radio" name="quality" value="accurate" id="quality-accurate"><span>Accurate</span></label>
               </div>
-              <p id="quality-note" class="setting-note">Accurate simulates clay flow with gravity on.</p>
+              <p id="quality-note" class="setting-note">Accurate samples finer beads and models wet clay flow.</p>
             </div>
           </div>
         </aside>
@@ -130,7 +130,17 @@
             <label class="setting-label" for="clay-body">Clay body</label>
             <select id="clay-body"></select>
             <div class="render-actions">
-              <button type="button" id="render-button" class="retro-button" aria-pressed="false" aria-controls="viewport">Render in 3D</button>
+              <div class="render-controls">
+                <label class="switch-control" for="render-toggle">
+                  <span class="setting-label">Render</span>
+                  <input id="render-toggle" type="checkbox" role="switch" aria-controls="viewport render-quality">
+                  <span class="toggle" aria-hidden="true"></span>
+                </label>
+                <div id="render-quality" class="quality-choices" role="radiogroup" aria-label="Render quality" hidden>
+                  <label><input type="radio" name="render-quality" value="low" checked><span>Low</span></label>
+                  <label><input type="radio" name="render-quality" value="high"><span>High</span></label>
+                </div>
+              </div>
               <a id="clay-reference" target="_blank" rel="noopener noreferrer">Clay data sheet</a>
             </div>
           </div>
@@ -153,7 +163,11 @@
                 <tr id="fired-sizes"><th scope="row">Fired</th><td>—</td><td>—</td><td>—</td></tr>
               </tbody>
             </table>
-            <button type="button" id="compare-button" class="retro-button compare-button" aria-pressed="false" aria-controls="viewport" disabled>Compare</button>
+            <label class="switch-control size-overlay" for="overlay-toggle">
+              <span class="setting-label">Shrinkage overlay</span>
+              <input id="overlay-toggle" type="checkbox" role="switch" aria-controls="viewport" disabled>
+              <span class="toggle" aria-hidden="true"></span>
+            </label>
             <p id="shrinkage-note" class="setting-note"></p>
           </div>
         </div>
@@ -170,8 +184,8 @@
       <div class="help-content">
         <p>Drop in a G-code file or explore the sample vase. Drag to orbit, scroll to zoom, or use the camera buttons to reset the view.</p>
         <p>Set the nozzle diameter to change bead width. Runny clay lays wider and flatter. With gravity on, it also compresses and sags more across unsupported spans.</p>
-        <p>Fast estimates sag from the toolpath. Accurate uses a simplified yield-stress solver that redistributes clay along the bead under gravity. It also uses finer geometry and sharper studio shadows.</p>
-        <p>Use Dimensions to label the print in 3D. Choose Fired to preview shrinkage, or Compare to overlay both sizes. Render in 3D shows the estimated color and surface finish.</p>
+        <p>Fast estimates sag from the toolpath. Accurate samples the bead at smaller intervals and models deposition and wet clay flow when gravity is on.</p>
+        <p>Use Dimensions to label the print. Choose Fired to preview shrinkage, or turn on Shrinkage overlay to see both sizes. Turn on Render to see the estimated finish. High render quality adds softer studio shadows and finer clay and canvas detail.</p>
         <p>The visualizer understands common 3D printer G-code and defaults to drawing horizontal G1 moves if the file has no extrusion instructions. Check the preview against your printer and clay blend.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
       </div>

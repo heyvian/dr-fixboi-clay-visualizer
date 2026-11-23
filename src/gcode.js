@@ -59,10 +59,12 @@ export function parseGcode(source) {
   let segmentCount = 0;
   let skippedArcs = 0;
   let run;
+  let runAmounts;
   let lastMode;
   const axes = ['X', 'Y', 'Z'];
   const tools = new Map([[0, { e: 0, retracted: 0 }]]);
   const explicit = [];
+  const extrusion = [];
   const inferred = [];
 
   for (const rawLine of source.split(/\r?\n|\r/)) {
@@ -121,13 +123,17 @@ export function parseGcode(source) {
       return value + (xyzAbsolute ? offset[index] : start[index]);
     });
     let depositedFraction = 0;
+    let depositedAmount = 0;
     if (words.has('E')) {
       hasExtrusionWords = true;
       const eAbsolute = extrusionOverride ?? xyzAbsolute;
       const next = words.get('E') * scale + (eAbsolute ? 0 : tool.e);
       const extruded = next - tool.e;
       tool.e = next;
-      if (extruded > 0.00001) depositedFraction = Math.max(0, 1 - tool.retracted / extruded);
+      if (extruded > 0.00001) {
+        depositedFraction = Math.max(0, 1 - tool.retracted / extruded);
+        depositedAmount = extruded * depositedFraction;
+      }
       tool.retracted = Math.max(0, tool.retracted - extruded);
     }
     const isArc = motion === 2 || motion === 3;
@@ -150,9 +156,16 @@ export function parseGcode(source) {
     if (!run || lastMode !== mode || from > 0) {
       run = [point(from)];
       mode.push(run);
+      if (isExplicit) {
+        runAmounts = [];
+        extrusion.push(runAmounts);
+      }
     }
     const steps = arc ? Math.max(1, Math.ceil(arc.steps * (1 - from))) : 1;
     for (let step = 1; step <= steps; step++) run.push(point(mix(from, 1, step / steps)));
+    if (isExplicit) {
+      for (let step = 0; step < steps; step++) runAmounts.push(depositedAmount / steps);
+    }
     lastMode = mode;
     segmentCount += steps;
     if (segmentCount > maximumSegments) throw new Error('This file exceeds the 300,000-move preview limit. Try a smaller print.');
@@ -179,7 +192,7 @@ export function parseGcode(source) {
   if (Math.max(...dimensions) > 1_000_000 || !dimensions.every(Number.isFinite)) {
     throw new Error('The print dimensions exceed the preview range. Check the file units.');
   }
-  return { paths, low, high, dimensions, inferExtrusion, skippedArcs };
+  return { paths, low, high, dimensions, inferExtrusion, skippedArcs, extrusion: inferExtrusion ? undefined : extrusion };
 }
 
 export function inspectToolpath(model, nozzle) {

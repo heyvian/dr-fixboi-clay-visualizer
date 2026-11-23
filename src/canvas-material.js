@@ -32,7 +32,7 @@ vec2 clothPoint = vCanvasPosition;
 float dye = canvasNoise(clothPoint * 0.036);
 float cotton = canvasNoise(clothPoint * 0.16 + 13.0);
 vec2 drift = vec2(canvasNoise(clothPoint * 0.11), canvasNoise(clothPoint * 0.09 + 34.0)) - 0.5;
-vec2 threads = clothPoint / 0.72 + 0.46 * drift;
+vec2 threads = clothPoint / 1.07 + 0.46 * drift;
 vec2 strand = floor(threads);
 vec2 ridge = pow(sin(fract(threads) * 3.14159265), vec2(1.4));
 float warp = ridge.x * (0.71 + 0.22 * sin(3.14159265 * (threads.y + strand.x)));
@@ -42,12 +42,26 @@ float yarnTone = mix(canvasHash(vec2(strand.x, 12.0)), canvasHash(vec2(-24.0, st
 float detail = resolveCanvasDetail(threads);
 vec2 napPoint = clothPoint * 4.0;
 float nap = (canvasNoise(napPoint) - 0.5) * resolveCanvasDetail(napPoint);
-float canvasHeight = 0.12 * (weave - 0.5) * detail + 0.032 * nap + 0.16 * cotton;
-diffuseColor.rgb *= 0.91 + 0.12 * dye + 0.065 * cotton
+float canvasHeight = 0.17 * (weave - 0.5) * detail + 0.032 * nap + 0.16 * cotton;
+float surfaceRoughness = 0.06 * (cotton - 0.5) + 0.09 * (0.5 - weave) * detail;
+float canvasTone = 0.91 + 0.12 * dye + 0.065 * cotton
   + detail * (0.075 * (yarnTone - 0.5) + 0.04 * (weave - 0.5));
+#ifdef HIGH_SURFACE_DETAIL
+  // Stretch grain along the top thread so the warp and weft have distinct fiber normals.
+  vec2 warpFiber = vec2(threads.x * 6.3 + 0.7 * threads.y, threads.y * 0.78);
+  vec2 weftFiber = vec2(threads.y * 6.3 - 0.7 * threads.x, threads.x * 0.78);
+  float warpNap = (canvasNoise(warpFiber) - 0.5) * resolveCanvasDetail(warpFiber);
+  float weftNap = (canvasNoise(weftFiber) - 0.5) * resolveCanvasDetail(weftFiber);
+  float fibers = mix(warpNap, weftNap, smoothstep(-0.05, 0.05, weft - warp));
+  float yarnSlub = (canvasNoise(threads * 0.39 + 21.0) - 0.5) * detail;
+  canvasHeight += 0.058 * fibers + 0.048 * yarnSlub;
+  surfaceRoughness += 0.15 * fibers + 0.05 * yarnSlub;
+  canvasTone += 0.085 * fibers + 0.04 * yarnSlub;
+#endif
+diffuseColor.rgb *= canvasTone;
 `;
 
-export function createCanvasMaterial() {
+export function createCanvasMaterial(high) {
   const material = new MeshPhysicalMaterial({
     color: '#a89b86',
     roughness: 0.94,
@@ -57,6 +71,7 @@ export function createCanvasMaterial() {
     sheenColor: '#c8bba4',
     sheenRoughness: 0.94,
   });
+  if (high) material.defines.HIGH_SURFACE_DETAIL = 1;
 
   // Use world-space millimeters so every yarn can vary without a repeated texture tile.
   material.onBeforeCompile = shader => {
@@ -68,7 +83,7 @@ export function createCanvasMaterial() {
       .replace('#include <color_fragment>', canvasMaps)
       .replace('#include <roughnessmap_fragment>', `
         #include <roughnessmap_fragment>
-        roughnessFactor = clamp(roughnessFactor + 0.06 * (cotton - 0.5) + 0.09 * (0.5 - weave) * detail, 0.8, 1.0);
+        roughnessFactor = clamp(roughnessFactor + surfaceRoughness, 0.8, 1.0);
       `)
       .replace('#include <normal_fragment_maps>', `
         #include <normal_fragment_maps>

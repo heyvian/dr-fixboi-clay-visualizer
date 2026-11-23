@@ -5,8 +5,9 @@ import { saveSettings } from './settings.js';
 export function setupRenderPanel(viewer, settings) {
   const dimensionToggle = document.getElementById('dimension-toggle');
   const modelStats = document.getElementById('model-stats');
-  const renderButton = document.getElementById('render-button');
-  const compareButton = document.getElementById('compare-button');
+  const renderToggle = document.getElementById('render-toggle');
+  const renderQuality = document.getElementById('render-quality');
+  const overlayToggle = document.getElementById('overlay-toggle');
   const comparisonKey = document.getElementById('comparison-key');
   const viewport = document.getElementById('viewport');
   const bodySelect = document.getElementById('clay-body');
@@ -25,7 +26,9 @@ export function setupRenderPanel(viewer, settings) {
     bodySelect.add(new Option(body.name, id));
   }
   bodySelect.value = settings.body;
-  renderButton.disabled = !viewer;
+  renderToggle.disabled = !viewer;
+  renderToggle.checked = settings.rendering;
+  renderQuality.querySelector('input[value="' + settings.renderQuality + '"]').checked = true;
 
   function showMeasurements() {
     if (!dimensions) return;
@@ -50,7 +53,7 @@ export function setupRenderPanel(viewer, settings) {
     printedRow.classList.toggle('current-stage', !fired);
     firedRow.classList.toggle('current-stage', fired);
     document.getElementById('stage-' + stage).checked = true;
-    compareButton.setAttribute('aria-pressed', String(comparing));
+    overlayToggle.checked = comparing;
     comparisonKey.hidden = !comparing;
 
     for (const stage of stages) {
@@ -60,10 +63,10 @@ export function setupRenderPanel(viewer, settings) {
     }
 
     const rendering = Boolean(viewer && settings.rendering);
-    renderButton.setAttribute('aria-pressed', String(rendering));
+    renderQuality.hidden = !rendering;
     viewport.classList.toggle('material-view', rendering);
     viewer?.setScale(fired ? scale : 1);
-    viewer?.setAppearance(rendering ? body[stage] : undefined);
+    viewer?.setAppearance(rendering ? body[stage] : undefined, settings.renderQuality);
     viewer?.setComparison(comparing);
     updateDrafting();
     showMeasurements();
@@ -96,14 +99,18 @@ export function setupRenderPanel(viewer, settings) {
     saveSettings(settings);
     updateAppearance();
   });
-  renderButton.addEventListener('click', () => {
-    settings.rendering = !settings.rendering;
+  renderToggle.addEventListener('change', () => {
+    settings.rendering = renderToggle.checked;
     saveSettings(settings);
     updateAppearance();
-    if (settings.rendering) showViewport();
   });
-  compareButton.addEventListener('click', () => {
-    settings.comparing = !settings.comparing;
+  renderQuality.addEventListener('change', event => {
+    settings.renderQuality = event.target.value;
+    saveSettings(settings);
+    updateAppearance();
+  });
+  overlayToggle.addEventListener('change', () => {
+    settings.comparing = overlayToggle.checked;
     saveSettings(settings);
     updateAppearance();
     if (settings.comparing) showViewport();
@@ -113,7 +120,7 @@ export function setupRenderPanel(viewer, settings) {
   return {
     setMeasurements(size) {
       dimensions = size;
-      compareButton.disabled = !viewer;
+      overlayToggle.disabled = !viewer;
       showMeasurements();
     },
   };

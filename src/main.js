@@ -6,6 +6,8 @@ import '@fontsource/ibm-plex-mono/latin-700.css';
 import './style.css';
 import { makeSample } from './sample.js';
 import { createViewer } from './scene.js';
+import { setupRenderPanel } from './render-panel.js';
+import { loadSettings, saveSettings } from './settings.js';
 
 const byId = id => document.getElementById(id);
 const nozzle = byId('nozzle');
@@ -23,6 +25,55 @@ const helpDialog = byId('help-dialog');
 const cameraButtons = [byId('zoom-in'), byId('zoom-out'), byId('reset-view')];
 const sampleName = 'sample-vase.gcode';
 const sample = makeSample();
+const settings = loadSettings();
+let schedulePreview = () => {};
+
+nozzle.value = settings.nozzle.toFixed(1);
+viscosity.value = settings.viscosity;
+gravity.checked = settings.gravity;
+document.querySelector('input[name="quality"][value="' + settings.quality + '"]').checked = true;
+
+function updateSimulationSettings() {
+  settings.viscosity = viscosity.valueAsNumber;
+  settings.gravity = gravity.checked;
+  settings.quality = accurate.checked ? 'accurate' : 'fast';
+  saveSettings(settings);
+  viewer?.setQuality(settings.quality);
+  schedulePreview();
+}
+
+function changeNozzle(commit) {
+  const value = nozzle.valueAsNumber;
+  const minimum = Number(nozzle.min);
+  const maximum = Number(nozzle.max);
+  if (!commit && (!Number.isFinite(value) || value < minimum || value > maximum)) return;
+  const next = Number.isFinite(value) ? Math.round(Math.min(maximum, Math.max(minimum, value)) * 10) / 10 : settings.nozzle;
+  if (commit) nozzle.value = next.toFixed(1);
+  settings.nozzle = next;
+  updateSimulationSettings();
+}
+
+function stepNozzle(direction) {
+  nozzle.value = settings.nozzle + direction * 0.1;
+  changeNozzle(true);
+}
+
+function reflectViscosity() {
+  byId('viscosity-value').textContent = viscosity.value + '%';
+  viscosity.style.setProperty('--progress', viscosity.value + '%');
+}
+
+nozzle.addEventListener('input', () => changeNozzle(false));
+nozzle.addEventListener('change', () => changeNozzle(true));
+byId('nozzle-smaller').addEventListener('click', () => stepNozzle(-1));
+byId('nozzle-larger').addEventListener('click', () => stepNozzle(1));
+viscosity.addEventListener('input', () => {
+  reflectViscosity();
+  updateSimulationSettings();
+});
+gravity.addEventListener('change', updateSimulationSettings);
+byId('quality').addEventListener('change', updateSimulationSettings);
+reflectViscosity();
 
 const sampleUrl = URL.createObjectURL(new Blob([sample], { type: 'text/plain' }));
 byId('sample-link').href = sampleUrl;
@@ -41,7 +92,8 @@ helpDialog.addEventListener('click', event => {
 
 let viewer;
 try {
-  viewer = createViewer(byId('scene'), byId('axis-key'));
+  viewer = createViewer(byId('scene'), byId('axis-key'), byId('drafting'));
+  viewer.setQuality(settings.quality);
 } catch {
   sceneError.textContent = 'The 3D preview needs WebGL 2. Try a browser with hardware acceleration enabled.';
   sceneError.hidden = false;
@@ -50,9 +102,10 @@ try {
   cameraButtons.forEach(button => { button.disabled = true; });
 }
 
+const renderPanel = setupRenderPanel(viewer, settings);
+
 if (viewer) {
   const worker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
-  const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
   const sizeLimit = 25 * 1024 * 1024;
   let currentName;
   let currentIsSample = false;
@@ -61,7 +114,6 @@ if (viewer) {
   let busy = false;
   let pendingSettings = false;
   let previewTimer;
-  let nozzleValue = nozzle.valueAsNumber;
   let inferred = false;
   let skippedArcs = 0;
 
@@ -85,15 +137,11 @@ if (viewer) {
   function send(type, source) {
     busy = true;
     updateSceneStatus();
+    const { nozzle, viscosity, gravity, quality } = settings;
     worker.postMessage({
       type,
       source,
-      settings: {
-        nozzle: nozzleValue,
-        viscosity: viscosity.valueAsNumber,
-        gravity: gravity.checked,
-        quality: accurate.checked ? 'accurate' : 'fast',
-      },
+      settings: { nozzle, viscosity, gravity, quality },
     });
   }
 
@@ -109,11 +157,11 @@ if (viewer) {
     }
   }
 
-  function settingsChanged() {
+  schedulePreview = () => {
     pendingSettings = true;
     clearTimeout(previewTimer);
     previewTimer = setTimeout(flush, 80);
-  }
+  };
 
   function showFileDetails() {
     const details = [];
@@ -140,7 +188,7 @@ if (viewer) {
       inferred = data.inferExtrusion;
       skippedArcs = data.skippedArcs;
       const dimensions = viewer.setMesh(data.mesh, isLoad);
-      byId('model-stats').textContent = dimensions.map(value => numberFormat.format(value)).join(' × ') + ' mm';
+      renderPanel.setMeasurements(dimensions);
       if (isLoad || !status.classList.contains('has-error')) showFileDetails();
       cameraButtons.forEach(button => { button.disabled = false; });
     }
@@ -160,27 +208,6 @@ if (viewer) {
     updateStatus('The preview could not start. Reload the page and try again.', true);
     updateSceneStatus();
   });
-
-  function changeNozzle(commit) {
-    const value = nozzle.valueAsNumber;
-    const minimum = Number(nozzle.min);
-    const maximum = Number(nozzle.max);
-    if (!commit && (!Number.isFinite(value) || value < minimum || value > maximum)) return;
-    const next = Number.isFinite(value) ? Math.round(Math.min(maximum, Math.max(minimum, value)) * 10) / 10 : nozzleValue;
-    if (commit) nozzle.value = next.toFixed(1);
-    nozzleValue = next;
-    settingsChanged();
-  }
-
-  function stepNozzle(direction) {
-    nozzle.value = nozzleValue + direction * 0.1;
-    changeNozzle(true);
-  }
-
-  function reflectViscosity() {
-    byId('viscosity-value').textContent = viscosity.value + '%';
-    viscosity.style.setProperty('--progress', viscosity.value + '%');
-  }
 
   function loadSample() {
     if (loadingFile || upcoming) return;
@@ -212,16 +239,6 @@ if (viewer) {
     }
   }
 
-  nozzle.addEventListener('input', () => changeNozzle(false));
-  nozzle.addEventListener('change', () => changeNozzle(true));
-  byId('nozzle-smaller').addEventListener('click', () => stepNozzle(-1));
-  byId('nozzle-larger').addEventListener('click', () => stepNozzle(1));
-  viscosity.addEventListener('input', () => {
-    reflectViscosity();
-    settingsChanged();
-  });
-  gravity.addEventListener('change', settingsChanged);
-  byId('quality').addEventListener('change', settingsChanged);
   browse.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     void loadFile(fileInput.files[0]);
@@ -244,7 +261,6 @@ if (viewer) {
   cameraButtons[1].addEventListener('click', () => viewer.zoom(1 / 0.84));
   cameraButtons[2].addEventListener('click', viewer.reset);
   cameraButtons.forEach(button => { button.disabled = true; });
-  reflectViscosity();
   loadSample();
 } else {
   browse.disabled = true;

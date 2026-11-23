@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#241139">
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-BBgLYcLD.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-CbmkkobK.css">
+    <script type="module" crossorigin src="./pages-assets/index-BOUXLAnj.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-BA9umYxj.css">
   </head>
   <body>
     <div class="top-bar">
@@ -32,10 +32,11 @@
         <section class="window viewer" aria-labelledby="viewer-title">
           <div class="window-bar viewer-bar">
             <h2 id="viewer-title"><span class="window-icon cube-icon" aria-hidden="true"></span> 3D print preview</h2>
-            <span class="window-controls" aria-hidden="true"><i></i><i></i><i></i></span>
+            <button type="button" id="dimension-toggle" class="dimension-button" aria-pressed="false" aria-controls="viewport">Dimensions</button>
           </div>
           <div id="viewport" class="viewport">
             <div id="scene" class="scene" aria-label="Interactive 3D view of the clay print"></div>
+            <canvas id="drafting" class="drafting" aria-hidden="true" hidden></canvas>
             <div class="scene-status"><i aria-hidden="true"></i><span id="scene-status">Preparing preview</span></div>
             <div class="camera-tools" aria-label="Camera controls">
               <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
@@ -94,7 +95,7 @@
 
             <div class="setting gravity-setting">
               <label class="gravity-control" for="gravity">
-                <span><span class="setting-label">Simulate gravity</span><span class="setting-note">Preview sag and spreading.</span></span>
+                <span><span class="setting-label">Simulate gravity</span><span class="setting-note">Add sag and compression.</span></span>
                 <input id="gravity" type="checkbox" role="switch" checked>
                 <span class="toggle" aria-hidden="true"></span>
               </label>
@@ -111,6 +112,41 @@
         </aside>
       </div>
 
+      <section class="window render-window" aria-labelledby="render-title">
+        <div class="window-bar render-bar"><h2 id="render-title">Clay render</h2></div>
+        <div class="render-body">
+          <div class="clay-selection">
+            <label class="setting-label" for="clay-body">Clay body</label>
+            <select id="clay-body"></select>
+            <div class="render-actions">
+              <button type="button" id="render-button" class="retro-button" aria-pressed="false" aria-controls="viewport">Render in 3D</button>
+              <a id="clay-reference" target="_blank" rel="noopener noreferrer">Clay data sheet</a>
+            </div>
+          </div>
+
+          <div>
+            <span id="clay-stage-title" class="setting-label">Clay stage</span>
+            <div id="clay-stage" class="stage-choices" role="radiogroup" aria-labelledby="clay-stage-title">
+              <label><input type="radio" name="clay-stage" value="greenware" id="stage-greenware" checked><span><i id="swatch-greenware" aria-hidden="true"></i> Greenware</span></label>
+              <label><input type="radio" name="clay-stage" value="fired" id="stage-fired"><span><i id="swatch-fired" aria-hidden="true"></i> Fired</span></label>
+            </div>
+            <p class="setting-note">Freshly printed or fired unglazed at cone 6 in oxidation.</p>
+          </div>
+
+          <div>
+            <table class="size-comparison">
+              <caption>Size comparison (mm)</caption>
+              <thead><tr><td></td><th scope="col">Length</th><th scope="col">Width</th><th scope="col">Height</th></tr></thead>
+              <tbody>
+                <tr id="printed-sizes"><th scope="row">As printed</th><td>—</td><td>—</td><td>—</td></tr>
+                <tr id="fired-sizes"><th scope="row">Fired</th><td>—</td><td>—</td><td>—</td></tr>
+              </tbody>
+            </table>
+            <p id="shrinkage-note" class="setting-note"></p>
+          </div>
+        </div>
+      </section>
+
       <footer class="page-footer">
         <span><span class="footer-star" aria-hidden="true">✦</span> Your G-code stays on this device.</span>
         <span>Simulation is approximate.</span>
@@ -121,8 +157,9 @@
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
       <div class="help-content">
         <p>Drop in a G-code file or explore the sample vase. Drag to orbit, scroll to zoom, or use the camera buttons to reset the view.</p>
-        <p>Set the nozzle diameter to change bead width. Move the viscosity slider toward Runny for more spreading. Turn on gravity to see estimated sag and compression.</p>
-        <p>Switch from Fast to Accurate for more detail in the clay beads and finer sampling of the support beneath them.</p>
+        <p>Set the nozzle diameter to change bead width. Runny clay lays wider and flatter. With gravity on, it also compresses and sags more across unsupported spans.</p>
+        <p>Switch from Fast to Accurate for finer bead and support sampling, more display pixels, and sharper studio shadows.</p>
+        <p>Use Dimensions to label the print in 3D. Choose Fired to preview shrinkage for the selected body. Render in 3D shows its estimated color and surface finish.</p>
         <p>The visualizer understands common 3D printer G-code and defaults to drawing horizontal G1 moves if the file has no extrusion instructions. Check the preview against your printer and clay blend.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
       </div>

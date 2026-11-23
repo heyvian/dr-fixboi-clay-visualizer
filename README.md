@@ -2,7 +2,9 @@
 
 Preview a clay 3D print from G-code in a 90s-inspired browser lab. The app opens with a sample vase. Drop in your own file, orbit the model to examine the beads, and change nozzle diameter, viscosity, or gravity to compare outcomes.
 
-Files are processed in a browser worker and stay on your device. The preview estimates bead spreading, layer compression, and sag from nearby support. Fast is the default. Accurate draws finer bead geometry and samples the support beneath it in more detail. The viscosity scale runs from runny to stiff and has no physical units. Treat the preview as an estimate and validate settings against your printer, clay recipe, and test prints.
+Files are processed in a browser worker and stay on your device. Runny clay lays in a wider, flatter bead. Gravity adds compression and estimates droop from nearby support and unsupported span length. Fast is the default. Accurate samples the geometry and support in more detail and increases the resolution of the viewport and studio shadows. The viscosity scale runs from runny to stiff and has no physical units.
+
+Use **Dimensions** to label the model in 3D. **Clay render** compares freshly printed greenware and unglazed cone 6 oxidation finishes under studio lighting. The Fired stage scales the mesh uniformly using the midpoint of each selected clay body's published wet-to-dry and dry-to-fired shrinkage ranges, applied in sequence. Each preset links to its Plainsman data sheet. The [SHAB test documentation](https://digitalfire.com/test/shab) explains how the two rates are measured. Treat the preview as an estimate and compare it with a sample made from your own clay and firing schedule. The browser saves the chosen settings locally.
 
 The parser supports linear moves, XY-plane arcs, absolute and relative coordinates and extrusion, inch and millimeter units, coordinate resets, and M101/M103-style extrusion. If the file contains no extrusion commands, the app shows horizontal print moves and flags that assumption. The app needs a WebGL 2 browser and accepts files up to 25 MB.
 

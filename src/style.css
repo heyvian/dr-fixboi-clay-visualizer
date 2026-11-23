@@ -138,6 +138,14 @@ a:hover { color: #291437; }
   letter-spacing: .075em;
 }
 .viewer-bar { background: var(--lavender); }
+.dimension-button {
+  padding: .24rem .45rem;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  background: var(--cream);
+  font: 700 .75rem var(--mono);
+}
+.dimension-button:hover, .dimension-button[aria-pressed='true'] { background: var(--green); }
 .settings-bar { background: var(--green); }
 .window-icon {
   display: grid;
@@ -170,6 +178,9 @@ a:hover { color: #291437; }
   color: #e7d9fa;
 }
 .scene { position: absolute; inset: 0; }
+.viewport.material-view { background: radial-gradient(ellipse at 50% 38%, #817970, #55504b 55%, #393431); }
+.drafting { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.viewport:has(.drafting:not([hidden])) .scene-hint { display: none; }
 .scene canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 .scene canvas:active { cursor: grabbing; }
 .scene canvas:focus-visible { outline: 2px solid var(--green); outline-offset: -4px; }
@@ -420,6 +431,59 @@ a:hover { color: #291437; }
 .quality-choices input:checked + span { background: var(--green); }
 .quality-choices input:focus-visible + span { position: relative; z-index: 1; outline: 3px solid var(--purple); outline-offset: 2px; }
 
+.render-window { margin-top: 1.3rem; }
+.render-bar { background: var(--pink); }
+.render-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 1rem 1.35rem;
+  padding: .95rem;
+}
+.clay-selection select {
+  width: 100%;
+  margin-top: .55rem;
+  padding: .45rem 1.55rem .45rem .5rem;
+  appearance: none;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  font: 600 .875rem 'DM Sans', sans-serif;
+  background: linear-gradient(45deg, transparent 50%, var(--ink) 50%) right .76rem center / .3rem .3rem no-repeat,
+    linear-gradient(135deg, var(--ink) 50%, transparent 50%) right .46rem center / .3rem .3rem no-repeat, #f3eafb;
+}
+.render-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem .75rem; margin-top: .65rem; }
+.render-actions a { font: 500 .75rem var(--mono); }
+.render-actions button[aria-pressed='true'] { background: var(--green); }
+.stage-choices { display: grid; grid-template-columns: 1fr 1fr; gap: .38rem; margin-top: .55rem; }
+.stage-choices label { position: relative; cursor: pointer; }
+.stage-choices input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.stage-choices span {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  padding: .34rem;
+  border: 1px solid #a489b9;
+  background: #f6eefb;
+  font: 700 .75rem var(--mono);
+}
+.stage-choices i {
+  width: 1.2rem;
+  height: 1.2rem;
+  flex: none;
+  border: 1px solid var(--ink);
+  background: radial-gradient(circle, var(--fleck, transparent) .8px, transparent 1px) 0 0 / .32rem .28rem,
+    var(--clay-swatch, #b5a192);
+}
+.stage-choices input:checked + span { background: var(--green); border-color: var(--ink); }
+.stage-choices input:focus-visible + span { outline: 3px solid var(--purple); outline-offset: 2px; }
+.render-body .setting-note { margin: .48rem 0 0; }
+.size-comparison { width: 100%; border-collapse: collapse; font: 500 .75rem var(--mono); }
+.size-comparison caption { margin-bottom: .35rem; text-align: left; font: 700 .875rem var(--mono); text-transform: uppercase; }
+.size-comparison th, .size-comparison td { padding: .24rem .25rem; text-align: right; white-space: nowrap; }
+.size-comparison th[scope='row'] { text-align: left; }
+.size-comparison tbody { border-block: 1px solid #d8c9e3; }
+.size-comparison tr.current-stage { background: #f0e6fb; }
+
 .page-footer {
   display: flex;
   gap: .5rem 1rem;
@@ -441,6 +505,7 @@ a:hover { color: #291437; }
   .workspace { grid-template-columns: minmax(0, 1fr) minmax(16.7rem, 19rem); gap: 1rem; }
   .viewer-footer { font-size: .75rem; padding-inline: .65rem; }
   .viewport { min-height: 26rem; height: 52vw; }
+  .render-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 46rem) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
@@ -462,4 +527,7 @@ a:hover { color: #291437; }
   .axis-key { left: 0; bottom: .1rem; }
   .viewer-footer { gap: .45rem; }
   .nozzle-setting { column-gap: .75rem; }
+  .render-body { grid-template-columns: 1fr; }
+  .viewer-bar { padding-inline: .55rem; }
+  .viewer-bar h2 { font-size: .8125rem; gap: .38rem; }
 }

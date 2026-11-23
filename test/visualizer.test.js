@@ -3,6 +3,8 @@ import test from 'node:test';
 import { parseGcode } from '../src/gcode.js';
 import { makeClayMesh } from '../src/clay.js';
 import { makeSample } from '../src/sample.js';
+import { clayBodies, firedScale } from '../src/clay-bodies.js';
+import { normalizeSettings } from '../src/settings.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion } = parseGcode(`
@@ -132,4 +134,46 @@ test('fully stiff clay produces the same mesh with gravity on or off', () => {
   const gravityOn = makeClayMesh(model, { ...settings, gravity: true });
   const gravityOff = makeClayMesh(model, { ...settings, gravity: false });
   assert.deepEqual(gravityOn, gravityOff);
+});
+
+test('soft clay sags more across a longer unsupported span when gravity is on', () => {
+  function centerTop(span, gravity) {
+    const model = parseGcode(`M83
+      G0 X0 Z1
+      G1 X1 E1
+      G0 X0 Z5
+      G1 X1 E1
+      G0 X${span} Z1
+      G1 X${span + 1} E1
+      G0 X${span} Z5
+      G1 X${span + 1} E1
+      G0 X0 Z9
+      G1 X${span} E1`);
+    const { positions } = makeClayMesh(model, { nozzle: 6, viscosity: 20, gravity, quality: 'accurate' });
+    let top = 0;
+    for (let vertex = 0; vertex < positions.length; vertex += 3) {
+      if (Math.abs(positions[vertex] + 0.5) < 2.5) top = Math.max(top, positions[vertex + 1]);
+    }
+    return top;
+  }
+  assert.equal(centerTop(12, false), centerTop(38, false));
+  assert.ok(centerTop(12, true) > centerTop(38, true) + 0.5);
+  assert.ok(centerTop(38, false) > centerTop(38, true));
+});
+
+test('fired dimensions compound drying and firing shrinkage', () => {
+  assert.ok(Math.abs(firedScale(clayBodies.m340) - 0.8789) < 0.000001);
+  assert.ok(Math.abs(firedScale(clayBodies.polarIce) - 0.84976) < 0.000001);
+});
+
+test('restores saved controls and uses Fast for a first visit', () => {
+  const settings = normalizeSettings();
+  assert.equal(settings.quality, 'fast');
+  assert.equal(settings.finish, 'greenware');
+  const saved = {
+    nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
+    body: 'm390', finish: 'fired', rendering: true, drafting: true,
+  };
+  assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(saved))), saved);
+  assert.deepEqual(normalizeSettings({ nozzle: 70, quality: 'other', body: '__proto__' }), settings);
 });

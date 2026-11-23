@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createClayMaterial } from './clay-material.js';
+import { drawDimensions } from './dimensions.js';
 
 const sceneColors = {
   clay: '#ed619e',
@@ -89,11 +92,15 @@ function drawAxes(canvas, camera) {
   context.restore();
 }
 
-export function createViewer(container, axes) {
+export function createViewer(container, axes, drafting) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 10_000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  let pixelRatio = Math.min(window.devicePixelRatio, 1.25);
+  let renderQuality = 'fast';
+  renderer.setPixelRatio(pixelRatio);
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.04;
   renderer.domElement.tabIndex = 0;
@@ -106,28 +113,44 @@ export function createViewer(container, axes) {
   controls.maxPolarAngle = Math.PI * 0.49;
   controls.rotateSpeed = 0.82;
 
-  scene.add(new THREE.HemisphereLight('#ffddfa', '#341649', 2.05));
+  const ambient = new THREE.HemisphereLight('#ffddfa', '#341649', 2.05);
+  scene.add(ambient);
   const light = (color, strength, x, y, z) => {
     const source = new THREE.DirectionalLight(color, strength);
     source.position.set(x, y, z);
     scene.add(source);
+    return source;
   };
-  light('#fff0df', 2.65, -4, 7, 4);
-  light('#e6bbff', 2.0, 5, 5, -5);
-  light('#f6abd9', 0.52, 4, 2, 5);
+  const key = light('#fff0df', 2.65, -4, 7, 4);
+  const rim = light('#e6bbff', 2.0, 5, 5, -5);
+  const fill = light('#f6abd9', 0.52, 4, 2, 5);
+  const keyDirection = key.position.clone().normalize();
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.bias = -0.0001;
+  key.shadow.radius = 5;
+  scene.add(key.target);
 
   const grid = floorGrid();
   const shadow = floorShadow();
-  scene.add(grid, shadow);
-  const material = new THREE.MeshStandardMaterial({
+  const studioFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({
+    color: '#27231e', opacity: 0.60, depthWrite: false,
+  }));
+  studioFloor.rotation.x = -Math.PI / 2;
+  studioFloor.receiveShadow = true;
+  studioFloor.visible = false;
+  scene.add(grid, shadow, studioFloor);
+  const previewMaterial = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
     roughness: 0.77,
     side: THREE.DoubleSide,
   });
-  const clay = new THREE.Mesh(new THREE.BufferGeometry(), material);
+  const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
+  let clayMaterial;
+  let studioEnvironment;
   clay.visible = false;
   scene.add(clay);
+  const draftingBounds = new THREE.Box3();
   let shouldDraw = false;
 
   function render() {
@@ -137,6 +160,10 @@ export function createViewer(container, axes) {
       shouldDraw = false;
       renderer.render(scene, camera);
       drawAxes(axes, camera);
+      if (!drafting.hidden && clay.visible) {
+        draftingBounds.copy(clay.geometry.boundingBox).applyMatrix4(clay.matrixWorld);
+        drawDimensions(drafting, camera, draftingBounds, container.clientWidth, container.clientHeight);
+      }
     });
   }
 
@@ -145,10 +172,11 @@ export function createViewer(container, axes) {
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const distance = sphere.radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
-    controls.target.copy(sphere.center);
+    const radius = sphere.radius * clay.scale.x;
+    const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
+    controls.target.copy(sphere.center).multiplyScalar(clay.scale.x);
     camera.position.copy(controls.target).addScaledVector(new THREE.Vector3(0.52, 0.4, 1).normalize(), distance);
-    controls.minDistance = sphere.radius * 0.65;
+    controls.minDistance = radius * 0.65;
     controls.maxDistance = distance * 4;
     camera.near = Math.max(distance / 5_000, 0.0001);
     camera.far = distance * 25;
@@ -164,6 +192,8 @@ export function createViewer(container, axes) {
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     renderer.setSize(width, height, false);
+    drafting.width = Math.round(width * pixelRatio);
+    drafting.height = Math.round(height * pixelRatio);
     if (Math.min(oldAspect, camera.aspect) < 1 && Math.abs(oldAspect - camera.aspect) > 0.1) reset();
     render();
   }
@@ -218,10 +248,60 @@ export function createViewer(container, axes) {
     grid.geometry = new THREE.PlaneGeometry(spacing * 64, spacing * 64);
     grid.position.y = -totalSize * 0.0004;
     shadow.position.y = grid.position.y / 2;
-    shadow.scale.set(Math.max(size.x * 1.13, totalSize * 0.4), Math.max(size.z * 1.13, totalSize * 0.4), 1);
+    updateShadow(size);
     if (fit) reset();
     render();
     return [size.x, size.z, size.y];
+  }
+
+  function updateShadow(size) {
+    const scale = clay.scale.x;
+    const extent = Math.max(size.x, size.y, size.z) * scale;
+    shadow.scale.set(Math.max(size.x * scale * 1.13, extent * 0.4), Math.max(size.z * scale * 1.13, extent * 0.4), 1);
+    if (!renderer.shadowMap.enabled) return;
+
+    studioFloor.scale.set(extent * 9, extent * 9, 1);
+    studioFloor.position.y = -extent * 0.00035;
+    key.target.position.set(0, size.y * scale * 0.38, 0);
+    key.position.copy(key.target.position).addScaledVector(keyDirection, extent * 3);
+    const camera = key.shadow.camera;
+    const range = extent * 1.35;
+    camera.left = camera.bottom = -range;
+    camera.right = camera.top = range;
+    camera.near = extent;
+    camera.far = extent * 5;
+    camera.updateProjectionMatrix();
+    key.shadow.normalBias = extent * 0.0012;
+    renderer.shadowMap.needsUpdate = true;
+  }
+
+  function setScale(scale) {
+    clay.scale.setScalar(scale);
+    if (clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    render();
+  }
+
+  function setDrafting(visible) {
+    drafting.hidden = !visible;
+    camera.zoom = visible ? 0.85 : 1;
+    camera.updateProjectionMatrix();
+    render();
+  }
+
+  function setQuality(quality) {
+    if (quality === renderQuality) return;
+    renderQuality = quality;
+    const accurate = quality === 'accurate';
+    pixelRatio = accurate ? Math.min(window.devicePixelRatio * 1.35, 2) : Math.min(window.devicePixelRatio, 1.25);
+    renderer.setPixelRatio(pixelRatio);
+
+    const resolution = accurate ? 2048 : 1024;
+    key.shadow.map?.dispose();
+    key.shadow.map = null;
+    key.shadow.mapSize.set(resolution, resolution);
+    key.shadow.radius = accurate ? 10 : 5;
+    renderer.shadowMap.needsUpdate = true;
+    resize();
   }
 
   function zoom(amount) {
@@ -232,5 +312,46 @@ export function createViewer(container, axes) {
     controls.update();
   }
 
-  return { setMesh, zoom, reset };
+  function setAppearance(finish) {
+    if (finish) {
+      clayMaterial ??= createClayMaterial();
+      if (!studioEnvironment) {
+        const room = new RoomEnvironment();
+        const pmrem = new THREE.PMREMGenerator(renderer);
+        studioEnvironment = pmrem.fromScene(room, 0.04);
+        pmrem.dispose();
+        room.dispose();
+      }
+      clayMaterial.update(finish);
+    }
+
+    const active = Boolean(finish);
+    clay.material = active ? clayMaterial.material : previewMaterial;
+    scene.environment = active ? studioEnvironment.texture : null;
+    scene.environmentIntensity = 0.58;
+    renderer.toneMapping = active ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
+    ambient.color.set(active ? '#f7f5f2' : '#ffddfa');
+    ambient.groundColor.set(active ? '#a69c92' : '#341649');
+    ambient.intensity = active ? 0.66 : 2.05;
+    key.color.set(active ? '#fff9ee' : '#fff0df');
+    key.intensity = active ? 2.3 : 2.65;
+    rim.color.set(active ? '#f7f5f2' : '#e6bbff');
+    rim.intensity = active ? 0.64 : 2.0;
+    fill.color.set(active ? '#f4f1ec' : '#f6abd9');
+    fill.intensity = active ? 0.33 : 0.52;
+    grid.visible = !active;
+    shadow.visible = !active;
+    studioFloor.visible = active;
+    renderer.shadowMap.enabled = active;
+    key.castShadow = active;
+    clay.castShadow = clay.receiveShadow = active;
+    if (active && clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    if (!active) {
+      key.position.set(-4, 7, 4);
+      key.target.position.set(0, 0, 0);
+    }
+    render();
+  }
+
+  return { setMesh, setAppearance, setScale, setDrafting, setQuality, zoom, reset };
 }

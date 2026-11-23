@@ -37,6 +37,21 @@ function smoothSupport(gaps, path, radius) {
   }
 }
 
+function distanceToSupport(gaps, path) {
+  const distances = new Float32Array(path.length).fill(Infinity);
+  const last = path.length - 1;
+  for (const direction of [1, -1]) {
+    let unsupportedLength = Infinity;
+    for (let offset = 0; offset <= last; offset++) {
+      const i = direction === 1 ? offset : last - offset;
+      if (gaps[i] <= 0.45) unsupportedLength = 0;
+      else if (offset > 0) unsupportedLength += distance(path[i], path[i - direction]);
+      distances[i] = Math.min(distances[i], unsupportedLength);
+    }
+  }
+  return distances;
+}
+
 function applyGravity(paths, diameter, height, softness, supportSpacing) {
   const cells = new Map();
   const cellWidth = diameter * 1.3;
@@ -78,12 +93,14 @@ function applyGravity(paths, diameter, height, softness, supportSpacing) {
       bucket.set(sampleKey, point);
     }
 
+    const unsupportedLength = distanceToSupport(support, path);
     smoothSupport(support, path, diameter * 0.8);
     path.forEach((point, i) => {
       const [x, y, z] = point;
       const fraction = clamp(z / Math.max(height, diameter), 0, 1);
       const compression = z * softness * (0.15 - 0.07 * fraction);
-      const sag = diameter * 2.7 * softness * support[i] ** 1.5 * Math.min(1, z / diameter / 2);
+      const spanFactor = 1 - 0.65 * Math.exp(-unsupportedLength[i] / (2.2 * diameter));
+      const sag = diameter * 2.7 * softness * support[i] ** 1.5 * spanFactor * Math.min(1, z / diameter / 2);
       const spread = 1 + 0.065 * softness * (1 - fraction) ** 2;
       path[i] = [x * spread, y * spread, Math.max(0, z - compression - sag), (1 - fraction) * softness];
     });

@@ -73,8 +73,9 @@ export function setupRenderPanel(viewer, settings) {
   }
 
   function updateDrafting() {
-    dimensionToggle.disabled = !viewer || isComparing();
-    dimensionToggle.setAttribute('aria-pressed', String(settings.drafting || isComparing()));
+    const comparing = isComparing();
+    dimensionToggle.disabled = !viewer || comparing;
+    dimensionToggle.checked = settings.drafting || comparing;
     viewer?.setDrafting(settings.drafting);
   }
 
@@ -83,8 +84,8 @@ export function setupRenderPanel(viewer, settings) {
     viewport.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'instant' : 'smooth' });
   }
 
-  dimensionToggle.addEventListener('click', () => {
-    settings.drafting = !settings.drafting;
+  dimensionToggle.addEventListener('change', () => {
+    settings.drafting = dimensionToggle.checked;
     saveSettings(settings);
     updateDrafting();
   });

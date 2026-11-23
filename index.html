@@ -7,14 +7,17 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-MEzBs6hs.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-DbHYWUDR.css">
+    <script type="module" crossorigin src="./pages-assets/index-B6M9_s9L.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-DVr7fwh_.css">
   </head>
   <body>
     <div class="top-bar">
       <div class="shell top-bar-inner">
         <span class="network-name"><span aria-hidden="true">✦</span> THE CLAY LAB</span>
-        <button type="button" id="help-button" class="help-button"><span aria-hidden="true">?</span> How to use</button>
+        <div class="top-bar-actions">
+          <button type="button" id="help-button" class="top-bar-button" aria-haspopup="dialog" aria-controls="help-dialog"><span aria-hidden="true">?</span> How to use</button>
+          <button type="button" id="credits-button" class="top-bar-button" aria-haspopup="dialog" aria-controls="credits-dialog">Credits</button>
+        </div>
       </div>
     </div>
     <main class="shell">
@@ -33,7 +36,11 @@
         <section class="window viewer" aria-labelledby="viewer-title">
           <div class="window-bar viewer-bar">
             <h2 id="viewer-title"><span class="window-icon cube-icon" aria-hidden="true"></span> 3D print preview</h2>
-            <button type="button" id="dimension-toggle" class="dimension-button" aria-pressed="false" aria-controls="viewport">Dimensions</button>
+            <label class="switch-control dimension-switch" for="dimension-toggle">
+              <span>Dimensions</span>
+              <input id="dimension-toggle" type="checkbox" role="switch" aria-controls="drafting">
+              <span class="toggle" aria-hidden="true"></span>
+            </label>
           </div>
           <div id="viewport" class="viewport">
             <div id="scene" class="scene" aria-label="Interactive 3D view of the clay print"></div>
@@ -90,7 +97,7 @@
               <label class="setting-label" for="nozzle">Nozzle diameter</label>
               <div class="stepper">
                 <button type="button" id="nozzle-smaller" aria-label="Smaller nozzle">−</button>
-                <input id="nozzle" type="number" min="0.2" max="30" step="0.1" value="2.4" aria-describedby="diameter-unit">
+                <input id="nozzle" type="number" min="0.2" max="30" step="0.1" value="4.0" aria-describedby="diameter-unit">
                 <button type="button" id="nozzle-larger" aria-label="Larger nozzle">+</button>
                 <span id="diameter-unit">mm</span>
               </div>
@@ -181,15 +188,28 @@
       </footer>
     </main>
 
-    <dialog id="help-dialog" class="window help-dialog" aria-labelledby="help-title">
+    <dialog id="help-dialog" class="window info-dialog" aria-labelledby="help-title">
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
-      <div class="help-content">
-        <p>Drop in a G-code file or explore the sample vase. Drag to orbit, scroll to zoom, or use the camera buttons to reset the view.</p>
-        <p>Set the nozzle diameter to change bead width. Runny clay lays wider and flatter. With gravity on, it also compresses and sags more across unsupported spans.</p>
-        <p>Fast estimates sag from the toolpath. Accurate samples the bead at smaller intervals and models deposition and wet clay flow when gravity is on.</p>
-        <p>Use Dimensions to label the print. Choose Fired to preview shrinkage, or turn on Shrinkage overlay to see both sizes. Turn on Render to see the estimated finish. High render quality adds softer studio shadows and finer clay and canvas detail.</p>
-        <p>The visualizer understands common 3D printer G-code and defaults to drawing horizontal G1 moves if the file has no extrusion instructions. Check the preview against your printer and clay blend.</p>
+      <div class="dialog-content">
+        <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Look for Check G-code alerts, such as a first bead that starts too high.</p>
+        <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow with gravity on.</p>
+        <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
+        <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
+        <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail.</p>
+        <p>Your G-code stays on this device, and your browser remembers your settings.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
+      </div>
+    </dialog>
+
+    <dialog id="credits-dialog" class="window info-dialog" aria-labelledby="credits-title">
+      <div class="window-bar settings-bar"><h2 id="credits-title">Credits</h2></div>
+      <div class="dialog-content">
+        <ul>
+          <li><a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> powers the WebGL preview, orbit controls, studio lighting, and materials. MIT license.</li>
+          <li><a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> builds the site and bundles the simulation worker. MIT license.</li>
+          <li><a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> packages Archivo Black by Omnibus-Type, DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. The fonts use the SIL Open Font License 1.1.</li>
+        </ul>
+        <form method="dialog"><button type="submit" class="retro-button">Close</button></form>
       </div>
     </dialog>
   </body>

@@ -1,4 +1,5 @@
 import { solveBeadFlow } from './bead-flow.js';
+import { defaultNozzle } from './settings.js';
 
 const maximumRings = 150_000;
 const maximumRingVertices = 1_800_000;
@@ -206,7 +207,7 @@ function applyGravity(paths, diameter, height, softness, accurate) {
 }
 
 export function makeClayMesh(model, options) {
-  const diameter = clamp(Number(options.nozzle) || 2.4, 0.2, 30);
+  const diameter = clamp(Number(options.nozzle) || defaultNozzle, 0.2, 30);
   const softness = 1 - clamp(Number(options.viscosity) || 0, 0, 100) / 100;
   const accurate = options.quality === 'accurate';
   const extent = Math.max(...model.dimensions, diameter);

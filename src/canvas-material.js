@@ -24,6 +24,40 @@ float resolveCanvasDetail(vec2 point) {
   float footprint = max(length(dFdx(point)), length(dFdy(point)));
   return 1.0 - smoothstep(0.24, 0.8, footprint);
 }
+
+float canvasDiscoloration(vec2 point, float cotton) {
+  vec2 grid = point / 76.0;
+  vec2 cell = floor(grid);
+  vec2 center = 0.25 + 0.5 * vec2(canvasHash(cell + 7.0), canvasHash(cell - 23.0));
+  vec2 shape = (fract(grid) - center) * vec2(6.6, 10.5);
+  float edge = length(shape) + (cotton - 0.5) * 0.45;
+  float pigment = smoothstep(0.19, 0.91, canvasHash(cell + vec2(7.0, -19.0)));
+  return pigment * (1.0 - smoothstep(0.07, 1.0, edge));
+}
+
+// Each worn spot has a shallow groove and a raised fringe of exposed yarn.
+vec2 canvasAbrasion(vec2 point) {
+  vec2 grid = (point + vec2(32.0, 17.0)) / 86.0;
+  vec2 cell = floor(grid);
+  float seed = canvasHash(cell - 29.0);
+  vec2 center = 0.15 + 0.7 * vec2(canvasHash(cell + 13.0), canvasHash(cell - 47.0));
+  vec2 offset = (fract(grid) - center) * 86.0;
+  float angle = 6.2831853 * canvasHash(cell + 37.0);
+  vec2 direction = vec2(cos(angle), sin(angle));
+  float along = dot(offset, direction);
+  float across = dot(offset, vec2(-direction.y, direction.x));
+  float reach = mix(1.3, 3.6, canvasHash(cell + 83.0));
+  float taper = 1.0 - smoothstep(reach * 0.35, reach, abs(along));
+  float width = 0.15 + 0.14 * taper;
+  float distanceToGroove = abs(across - 0.20 * sin(along * 1.9) * taper);
+  float footprint = max(length(dFdx(point)), length(dFdy(point)));
+  float blur = max(0.06, footprint * 0.4);
+  float groove = 1.0 - smoothstep(width * 0.3, width + blur, distanceToGroove);
+  float fringe = 1.0 - smoothstep(0.08, 0.22 + blur, abs(distanceToGroove - width));
+  float fibers = 0.62 + 0.38 * sin(along * 5.4 + seed * 9.0);
+  float wear = step(0.36, seed) * taper * (1.0 - smoothstep(0.52, 1.45, footprint));
+  return wear * vec2(groove, fringe * fibers);
+}
 `;
 
 const canvasMaps = `
@@ -46,6 +80,11 @@ float canvasHeight = 0.17 * (weave - 0.5) * detail + 0.032 * nap + 0.16 * cotton
 float surfaceRoughness = 0.06 * (cotton - 0.5) + 0.09 * (0.5 - weave) * detail;
 float canvasTone = 0.91 + 0.12 * dye + 0.065 * cotton
   + detail * (0.075 * (yarnTone - 0.5) + 0.04 * (weave - 0.5));
+float pigment = canvasDiscoloration(clothPoint, cotton);
+vec2 abrasion = canvasAbrasion(clothPoint);
+canvasHeight += 0.085 * abrasion.y - 0.11 * abrasion.x;
+surfaceRoughness += 0.025 * pigment + 0.07 * (abrasion.x + abrasion.y);
+canvasTone += 0.10 * abrasion.y - 0.11 * abrasion.x;
 #ifdef HIGH_SURFACE_DETAIL
   // Stretch grain along the top thread so the warp and weft have distinct fiber normals.
   vec2 warpFiber = vec2(threads.x * 6.3 + 0.7 * threads.y, threads.y * 0.78);
@@ -58,7 +97,7 @@ float canvasTone = 0.91 + 0.12 * dye + 0.065 * cotton
   surfaceRoughness += 0.15 * fibers + 0.05 * yarnSlub;
   canvasTone += 0.085 * fibers + 0.04 * yarnSlub;
 #endif
-diffuseColor.rgb *= canvasTone;
+diffuseColor.rgb *= canvasTone * (1.0 - pigment * vec3(0.05, 0.075, 0.10));
 `;
 
 export function createCanvasMaterial(high) {

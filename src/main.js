@@ -21,7 +21,6 @@ const restoreSample = byId('restore-sample');
 const status = byId('upload-status');
 const sceneStatus = byId('scene-status');
 const sceneError = byId('scene-error');
-const helpDialog = byId('help-dialog');
 const cameraButtons = [byId('zoom-in'), byId('zoom-out'), byId('reset-view')];
 const sampleName = 'sample-vase.gcode';
 const sample = makeSample();
@@ -80,14 +79,17 @@ window.addEventListener('pagehide', event => {
   if (!event.persisted) URL.revokeObjectURL(sampleUrl);
 });
 
-byId('help-button').addEventListener('click', () => helpDialog.showModal());
-helpDialog.addEventListener('click', event => {
-  if (event.target === helpDialog) {
-    const bounds = helpDialog.getBoundingClientRect();
-    if (event.clientX < bounds.left || event.clientX > bounds.right
-      || event.clientY < bounds.top || event.clientY > bounds.bottom) helpDialog.close();
-  }
-});
+for (const name of ['help', 'credits']) {
+  const dialog = byId(name + '-dialog');
+  byId(name + '-button').addEventListener('click', () => dialog.showModal());
+  dialog.addEventListener('click', event => {
+    if (event.target === dialog) {
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right
+        || event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+    }
+  });
+}
 
 let viewer;
 try {

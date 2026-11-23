@@ -367,7 +367,11 @@ export function createViewer(container, axes, drafting) {
           .addScaledVector(vertical, y * 0.075).normalize();
         keySamples.push({ source, direction });
       }
-      studioAccents.push(light('#eaf2ff', 0.26, -1, 5, -3), light('#ffe8d0', 0.17, 5, 1, -3));
+      // A cool rear-left light and a low, warm side light reveal the bead relief from different angles.
+      studioAccents.push(
+        light('#e5f0ff', 0.36, -6, 3, -6),
+        light('#ffebd6', 0.25, 7, 1.1, 0),
+      );
     }
     for (const source of studioAccents) source.visible = high;
     for (const { source } of keySamples) {

@@ -1,5 +1,7 @@
 import { clayBodies } from './clay-bodies.js';
 
+export const defaultNozzle = 4;
+
 const key = 'dr-fixboi-clay-visualizer.settings';
 
 function numberOr(value, minimum, maximum, fallback) {
@@ -9,7 +11,7 @@ function numberOr(value, minimum, maximum, fallback) {
 export function normalizeSettings(saved) {
   const values = saved ?? {};
   return {
-    nozzle: numberOr(values.nozzle, 0.2, 30, 2.4),
+    nozzle: numberOr(values.nozzle, 0.2, 30, defaultNozzle),
     viscosity: numberOr(values.viscosity, 0, 100, 65),
     gravity: values.gravity !== false,
     quality: values.quality === 'accurate' ? 'accurate' : 'fast',

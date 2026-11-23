@@ -263,6 +263,7 @@ test('PSH Dark Granite uses the published total cone 6 shrinkage', () => {
 
 test('restores saved controls and uses Fast for a first visit', () => {
   const settings = normalizeSettings();
+  assert.equal(settings.nozzle, 4);
   assert.equal(settings.quality, 'fast');
   assert.equal(settings.body, 'darkGranite');
   assert.equal(settings.finish, 'greenware');

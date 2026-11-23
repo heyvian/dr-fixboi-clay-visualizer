@@ -32,25 +32,28 @@ a:hover { color: #291437; }
 .top-bar-inner {
   min-height: 2.55rem;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: .2rem .85rem;
 }
-.network-name, .help-button { font: 700 .8125rem var(--mono); }
+.top-bar-actions { display: flex; align-items: center; gap: .85rem; }
+.network-name, .top-bar-button { font: 700 .8125rem var(--mono); }
 .network-name { letter-spacing: .13em; }
 .network-name > span { color: var(--green); margin-right: .25rem; }
-.help-button {
+.top-bar-button {
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
   gap: .5rem;
   background: transparent;
   border: 0;
   color: inherit;
   padding: .3rem 0 .3rem .35rem;
 }
-.help-button:hover { color: var(--green); }
-.help-button:focus-visible { outline-color: var(--green); }
-.help-button span {
+.top-bar-button:hover { color: var(--green); }
+.top-bar-button:focus-visible { outline-color: var(--green); }
+.top-bar-button span {
   display: grid;
   place-items: center;
   width: 1.05rem;
@@ -112,7 +115,7 @@ a:hover { color: #291437; }
 .detail-star-small { position: absolute; right: .1rem; bottom: .45rem; font-size: 1.3rem; color: #a85bbb; }
 .detail-dot { position: absolute; left: .35rem; top: 2.9rem; width: .4rem; height: .4rem; background: var(--purple); transform: rotate(45deg); }
 
-.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 21.75rem); gap: 1.3rem; align-items: start; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 21.75rem); gap: 1.3rem; }
 .window {
   border: 2px solid var(--ink);
   background: var(--cream);
@@ -137,15 +140,8 @@ a:hover { color: #291437; }
   text-transform: uppercase;
   letter-spacing: .075em;
 }
+.viewer { display: flex; flex-direction: column; }
 .viewer-bar { background: var(--lavender); }
-.dimension-button {
-  padding: .24rem .45rem;
-  border: 1px solid var(--ink);
-  color: var(--ink);
-  background: var(--cream);
-  font: 700 .75rem var(--mono);
-}
-.dimension-button:hover, .dimension-button[aria-pressed='true'] { background: var(--green); }
 .settings-bar { background: var(--green); }
 .window-icon {
   display: grid;
@@ -170,7 +166,8 @@ a:hover { color: #291437; }
 .window-controls i:last-child { background: var(--ink); }
 
 .viewport {
-  height: clamp(28rem, 39vw, 33rem);
+  flex: 1;
+  min-height: clamp(28rem, 39vw, 33rem);
   overflow: hidden;
   position: relative;
   isolation: isolate;
@@ -408,6 +405,7 @@ a:hover { color: #291437; }
 }
 .range-labels { display: flex; justify-content: space-between; color: #614872; font: 500 .75rem var(--mono); }
 .switch-control { display: flex; align-items: center; justify-content: space-between; gap: .6rem; cursor: pointer; }
+.dimension-switch { gap: .4rem; font: 700 .75rem var(--mono); }
 .setting-note { display: block; color: #614872; font-size: .875rem; margin-top: .25rem; }
 .switch-control input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .toggle {
@@ -519,22 +517,23 @@ a:hover { color: #291437; }
   padding: 1.25rem 0 1rem;
 }
 .footer-star { color: var(--purple); }
-.help-dialog { color: var(--ink); max-width: min(30rem, calc(100% - 2.5rem)); padding: 0; }
-.help-dialog::backdrop { background: #241139a6; }
-.help-content { padding: 1rem 1.15rem 1.25rem; }
-.help-content p { line-height: 1.5; margin: 0 0 .85rem; }
-.help-content form { margin-top: 1.25rem; }
+.info-dialog { color: var(--ink); max-width: min(32rem, calc(100% - 2.5rem)); padding: 0; }
+.info-dialog::backdrop { background: #241139a6; }
+.dialog-content { padding: 1rem 1.15rem 1.25rem; line-height: 1.5; }
+.dialog-content p, .dialog-content li { margin: 0 0 .85rem; }
+.dialog-content ul { margin: 0; padding-left: 1.25rem; }
+.dialog-content form { margin-top: 1.25rem; }
 
 @media (max-width: 60rem) {
   .shell { width: calc(100% - 2.75rem); }
   .workspace { grid-template-columns: minmax(0, 1fr) minmax(16.7rem, 19rem); gap: 1rem; }
   .viewer-footer { font-size: .75rem; padding-inline: .65rem; }
-  .viewport { min-height: 26rem; height: 52vw; }
+  .viewport { min-height: max(26rem, 52vw); }
   .render-body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 46rem) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
-  .viewport { min-height: 22rem; height: 72vw; max-height: 30rem; }
+  .viewport { min-height: clamp(22rem, 72vw, 30rem); }
   .masthead { min-height: 8.6rem; }
   .settings-body { padding: .9rem; }
 }
@@ -545,7 +544,7 @@ a:hover { color: #291437; }
   .masthead p { margin-top: .48rem; font-size: .75rem; }
   .masthead-detail { display: none; }
   .mark { width: 3.55rem; height: 3.55rem; }
-  .viewport { min-height: 18rem; }
+  .viewport { min-height: clamp(18rem, 72vw, 30rem); }
   .scene-badges { left: .6rem; top: .65rem; right: 3rem; }
   .camera-tools { right: .55rem; top: .65rem; }
   .scene-hint { right: .55rem; bottom: .7rem; }

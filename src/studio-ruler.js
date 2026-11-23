@@ -61,7 +61,7 @@ float thumbprint(vec2 point, float textureNoise) {
 
 export function createStudioRuler() {
   const ruler = new Group();
-  const metal = new MeshPhysicalMaterial({ color: '#a9acae', metalness: 0.84, roughness: 0.39 });
+  const metal = new MeshPhysicalMaterial({ color: '#a3a7a8', metalness: 0.74, roughness: 0.64, anisotropy: 0.25 });
   setStudioSurface(metal, 'worn ruler', studioNoise + wear, {
     color_fragment: `
       vec2 rulerPoint = vPropPosition.xz;
@@ -86,7 +86,7 @@ export function createStudioRuler() {
       diffuseColor.rgb = mix(diffuseColor.rgb, slipColor, min(0.94, clayCoverage + crumbs * face * 0.68));
       float rulerBump = 0.009 * brushing - 0.018 * scratches + (clayCoverage + crumbs) * 0.033;
     `,
-    roughnessmap_fragment: 'roughnessFactor = mix(roughnessFactor + 0.12 * scratches, 0.92, max(engraving * 0.48, clayCoverage));',
+    roughnessmap_fragment: 'roughnessFactor = mix(roughnessFactor + 0.05 * brushing + 0.10 * scratches, 0.92, max(engraving * 0.48, clayCoverage));',
     metalnessmap_fragment: 'metalnessFactor *= 1.0 - max(engraving * 0.92, clayCoverage);',
     normal_fragment_maps: 'normal = surfaceBumpNormal(-vViewPosition, normal, rulerBump, faceDirection);',
   }, { uRulerMarks: { value: rulerMarkings() } });

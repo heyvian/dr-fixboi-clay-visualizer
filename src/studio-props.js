@@ -175,7 +175,8 @@ export function createStudioProps() {
     placeBeside(vesselBounds, ground, depth) {
       const side = vesselBounds.max.x;
       tools.position.set(side - toolsBounds.min.x + 300, ground, -depth * 0.16);
-      ruler.position.set(side - rulerBounds.min.x + 200, ground, tools.position.z + toolsBounds.max.z - rulerBounds.min.z + 22);
+      const centerX = (vesselBounds.min.x + side) / 2;
+      ruler.position.set(centerX - 30, ground, vesselBounds.max.z - rulerBounds.min.z + 200);
       vesselBounds.union(worldBounds.copy(toolsBounds).translate(tools.position));
       vesselBounds.union(worldBounds.copy(rulerBounds).translate(ruler.position));
     },

@@ -100,6 +100,22 @@ test('G-code checks flag an unusually high first bead and below-bed deposition',
   assert.match(inspectToolpath(below, 2.4)[0], /deposits below Z0/);
 });
 
+test('warns when the deposited footprint is more than 50 mm from the XY origin', () => {
+  const alertsFor = (x, y) => inspectToolpath(parseGcode(`
+    G0 X500 Y500 Z1
+    G0 X${x - 60} Y${y - 20}
+    G1 X${x + 60} E1
+    G1 Y${y + 20} E2
+    G1 X${x - 60} E3
+    G1 Y${y - 20} E4
+  `), 4);
+
+  assert.deepEqual(alertsFor(0, 0), []);
+  assert.deepEqual(alertsFor(30, 39), []);
+  assert.deepEqual(alertsFor(30, 40), []);
+  assert.deepEqual(alertsFor(-36, 48), ['Your object appears to be 60 mm off center from X0 Y0.']);
+});
+
 function meshSize({ positions, indices }) {
   assert.ok(positions.length);
   assert.ok(indices.length);

@@ -210,6 +210,12 @@ export function inspectToolpath(model, nozzle) {
   if (lowestHeight < -tolerance) {
     alerts.push('The toolpath deposits below Z0 at ' + height(lowestHeight) + '. Check the work offset.');
   }
+  const centerX = (model.low[0] + model.high[0]) / 2;
+  const centerY = (model.low[1] + model.high[1]) / 2;
+  const centerOffset = Math.hypot(centerX, centerY);
+  if (centerOffset > 50) {
+    alerts.push('Your object appears to be ' + Number(centerOffset.toFixed(2)) + ' mm off center from X0 Y0.');
+  }
   if (model.inferExtrusion) alerts.push('No extrusion commands found. Showing horizontal print moves.');
   if (model.skippedArcs) alerts.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
   return alerts;

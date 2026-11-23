@@ -367,10 +367,10 @@ export function createViewer(container, axes, drafting) {
           .addScaledVector(vertical, y * 0.075).normalize();
         keySamples.push({ source, direction });
       }
-      // A cool rear-left light and a low, warm side light reveal the bead relief from different angles.
+      // Rim light from behind the vessel and raking light across the right wall.
       studioAccents.push(
-        light('#e5f0ff', 0.36, -6, 3, -6),
-        light('#ffebd6', 0.25, 7, 1.1, 0),
+        light('#c6ddff', 1.0, -4, 5, -7),
+        light('#ffe0bd', 0.88, 7, 1.1, 0),
       );
     }
     for (const source of studioAccents) source.visible = high;
@@ -403,17 +403,17 @@ export function createViewer(container, axes, drafting) {
     scene.background = active ? studioBackdrop : null;
     scene.fog = active ? studioFog : null;
     scene.environment = studio?.environment.texture ?? null;
-    scene.environmentIntensity = 0.58;
+    scene.environmentIntensity = high ? 0.42 : 0.58;
     renderer.toneMapping = active ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
     ambient.color.set(active ? '#f7f5f2' : '#ffddfa');
     ambient.groundColor.set(active ? '#a69c92' : '#341649');
-    ambient.intensity = active ? 0.66 : 2.05;
+    ambient.intensity = high ? 0.43 : (active ? 0.66 : 2.05);
     key.color.set(active ? '#fff9ee' : '#fff0df');
     key.intensity = active ? 2.3 * (high ? 0.24 : 1) : 2.65;
     rim.color.set(active ? '#f7f5f2' : '#e6bbff');
-    rim.intensity = active ? 0.64 : 2.0;
+    rim.intensity = high ? 0.28 : (active ? 0.64 : 2.0);
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
-    fill.intensity = active ? 0.33 : 0.52;
+    fill.intensity = high ? 0.17 : (active ? 0.33 : 0.52);
     grid.visible = !active;
     shadow.visible = !active;
     if (studioFloor) studioFloor.visible = active;

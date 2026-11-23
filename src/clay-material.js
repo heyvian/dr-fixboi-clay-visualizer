@@ -1,4 +1,5 @@
 import { Color, DoubleSide, MeshPhysicalMaterial } from 'three';
+import { surfaceBumpShader } from './surface-bump.js';
 
 const claySurface = `
 varying vec3 vClayPosition;
@@ -35,15 +36,6 @@ float clayDetailVisibility(vec3 point) {
   return 1.0 - smoothstep(0.35, 1.15, footprint);
 }
 
-vec3 clayBump(vec3 surface, vec3 surfaceNormal, float elevation, float facing) {
-  vec3 tangentX = dFdx(surface);
-  vec3 tangentY = dFdy(surface);
-  vec3 acrossX = cross(tangentY, surfaceNormal);
-  vec3 acrossY = cross(surfaceNormal, tangentX);
-  float orientation = dot(tangentX, acrossX) * facing;
-  vec3 gradient = sign(orientation) * (dFdx(elevation) * acrossX + dFdy(elevation) * acrossY);
-  return normalize(max(abs(orientation), 0.00000001) * surfaceNormal - gradient);
-}
 `;
 
 const applyClayColor = `
@@ -81,7 +73,7 @@ export function createClayMaterial() {
       '#include <begin_vertex>',
       '#include <begin_vertex>\nvClayPosition = position;',
     );
-    shader.fragmentShader = claySurface + shader.fragmentShader
+    shader.fragmentShader = claySurface + surfaceBumpShader + shader.fragmentShader
       .replace('#include <color_fragment>', applyClayColor)
       .replace('#include <roughnessmap_fragment>', `
         #include <roughnessmap_fragment>
@@ -89,7 +81,7 @@ export function createClayMaterial() {
       `)
       .replace('#include <normal_fragment_maps>', `
         #include <normal_fragment_maps>
-        normal = clayBump(-vViewPosition, normal, uClayGrain * (grain + 0.22 * variation), faceDirection);
+        normal = surfaceBumpNormal(-vViewPosition, normal, uClayGrain * (grain + 0.22 * variation), faceDirection);
       `);
   };
 

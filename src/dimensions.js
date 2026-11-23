@@ -12,6 +12,15 @@ function keepVisible(start, end, extent, padding) {
   return Math.max(padding - Math.min(start, end), Math.min(0, extent - padding - Math.max(start, end)));
 }
 
+function strokeDimension(context) {
+  context.strokeStyle = '#392849';
+  context.lineWidth = 2.8;
+  context.stroke();
+  context.strokeStyle = '#e4fa83';
+  context.lineWidth = 1.15;
+  context.stroke();
+}
+
 export function drawDimensions(canvas, camera, bounds, width, height) {
   const context = canvas.getContext('2d');
   context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
@@ -30,9 +39,7 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
     [new Vector3(farSide, min.y, front), new Vector3(farSide, max.y, front), 'H'],
   ];
 
-  context.strokeStyle = '#e4fa83';
   context.fillStyle = '#e4fa83';
-  context.lineWidth = 1.15;
   context.font = '700 12px "IBM Plex Mono", monospace';
   context.textBaseline = 'middle';
   context.textAlign = 'center';
@@ -56,14 +63,6 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
     const rx = bx + offsetX;
     const ry = by + offsetY;
 
-    context.setLineDash([3, 3]);
-    context.beginPath();
-    context.moveTo(ax, ay);
-    context.lineTo(qx, qy);
-    context.moveTo(bx, by);
-    context.lineTo(rx, ry);
-    context.stroke();
-    context.setLineDash([]);
     context.beginPath();
     context.moveTo(qx, qy);
     context.lineTo(rx, ry);
@@ -73,7 +72,7 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
       context.lineTo(x, y);
       context.lineTo(x + direction * ux * arrow + uy * 3, y + direction * uy * arrow - ux * 3);
     }
-    context.stroke();
+    strokeDimension(context);
 
     const label = axis + ' ' + formatLength(sizes[index]) + ' mm';
     const half = context.measureText(label).width / 2 + 5;

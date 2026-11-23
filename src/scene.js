@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createClayMaterial } from './clay-material.js';
+import { createCanvasMaterial } from './canvas-material.js';
 import { drawDimensions } from './dimensions.js';
 
 const sceneColors = {
@@ -132,13 +133,7 @@ export function createViewer(container, axes, drafting) {
 
   const grid = floorGrid();
   const shadow = floorShadow();
-  const studioFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({
-    color: '#27231e', opacity: 0.60, depthWrite: false,
-  }));
-  studioFloor.rotation.x = -Math.PI / 2;
-  studioFloor.receiveShadow = true;
-  studioFloor.visible = false;
-  scene.add(grid, shadow, studioFloor);
+  scene.add(grid, shadow);
   const previewMaterial = new THREE.MeshStandardMaterial({
     color: '#ffffff',
     vertexColors: true,
@@ -148,6 +143,7 @@ export function createViewer(container, axes, drafting) {
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
   let clayMaterial;
   let studioEnvironment;
+  let studioFloor;
   clay.visible = false;
   scene.add(clay);
   const draftingBounds = new THREE.Box3();
@@ -260,7 +256,8 @@ export function createViewer(container, axes, drafting) {
     shadow.scale.set(Math.max(size.x * scale * 1.13, extent * 0.4), Math.max(size.z * scale * 1.13, extent * 0.4), 1);
     if (!renderer.shadowMap.enabled) return;
 
-    studioFloor.scale.set(extent * 9, extent * 9, 1);
+    const floorWidth = extent * 9;
+    studioFloor.scale.set(floorWidth, floorWidth, 1);
     studioFloor.position.y = -extent * 0.00035;
     key.target.position.set(0, size.y * scale * 0.38, 0);
     key.position.copy(key.target.position).addScaledVector(keyDirection, extent * 3);
@@ -321,6 +318,10 @@ export function createViewer(container, axes, drafting) {
         studioEnvironment = pmrem.fromScene(room, 0.04);
         pmrem.dispose();
         room.dispose();
+        studioFloor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), createCanvasMaterial());
+        studioFloor.rotation.x = -Math.PI / 2;
+        studioFloor.receiveShadow = true;
+        scene.add(studioFloor);
       }
       clayMaterial.update(finish);
     }
@@ -341,7 +342,7 @@ export function createViewer(container, axes, drafting) {
     fill.intensity = active ? 0.33 : 0.52;
     grid.visible = !active;
     shadow.visible = !active;
-    studioFloor.visible = active;
+    if (studioFloor) studioFloor.visible = active;
     renderer.shadowMap.enabled = active;
     key.castShadow = active;
     clay.castShadow = clay.receiveShadow = active;

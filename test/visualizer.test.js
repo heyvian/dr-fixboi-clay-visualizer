@@ -151,6 +151,31 @@ test('fully stiff clay produces the same mesh with gravity on or off', () => {
   assert.deepEqual(gravityOn, gravityOff);
 });
 
+test('near-closed perimeters share a seam ring while rising paths retain end caps', () => {
+  const settings = { nozzle: 6, viscosity: 100, gravity: false };
+  const perimeter = 'M83\nG0 Z1\nG1 X30 E1\nG1 Y30 E1\nG1 X0 E1\n';
+  const closed = makeClayMesh(parseGcode(perimeter + 'G1 Y0.3 E1'), settings);
+  const rising = makeClayMesh(parseGcode(perimeter + 'G1 Y0.3 Z1.4 E1'), settings);
+  assert.equal(closed.indices.length, closed.positions.length * 2);
+  assert.equal(rising.indices.length, rising.positions.length * 2 - 12);
+});
+
+test('a corner ring stays aligned when the incoming toolpath point is closer', () => {
+  function cornerRing(moves) {
+    const model = parseGcode('M83\nG0 X-12 Z1\n' + moves + '\nG1 X0 E1\nG1 Y12 E1');
+    const { positions } = makeClayMesh(model, { nozzle: 6, viscosity: 100, gravity: false });
+    const ringSize = 12 * 3;
+    for (let i = 0; i + ringSize <= positions.length; i += ringSize) {
+      const ring = positions.slice(i, i + ringSize);
+      const centerX = ring.reduce((sum, value, axis) => sum + (axis % 3 === 0 ? value : 0), 0) / 12;
+      const centerZ = ring.reduce((sum, value, axis) => sum + (axis % 3 === 2 ? value : 0), 0) / 12;
+      if (Math.abs(centerX - 6) < 0.001 && Math.abs(centerZ - 6) < 0.001) return ring;
+    }
+    assert.fail('Corner ring was not found');
+  }
+  assert.deepEqual(cornerRing(''), cornerRing('G1 X-0.25 E1'));
+});
+
 test('soft clay sags more across a longer unsupported span when gravity is on', () => {
   function centerTop(span, gravity) {
     const model = parseGcode(`M83

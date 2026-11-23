@@ -25,27 +25,31 @@ function samplePath(path, origin, maxStep, minStep) {
   return samples;
 }
 
-function smoothSupport(gaps, path, radius) {
+function smoothSupport(gaps, path, radius, closed) {
   const last = path.length - 1;
+  const steps = last + (closed ? path.length : 0);
   for (const direction of [1, -1]) {
-    for (let offset = 1; offset <= last; offset++) {
-      const i = direction === 1 ? offset : last - offset;
-      const previous = i - direction;
+    for (let offset = 1; offset <= steps; offset++) {
+      const index = offset % path.length;
+      const i = direction === 1 ? index : last - index;
+      const previous = (i - direction + path.length) % path.length;
       const blend = 1 - Math.exp(-distance(path[i], path[previous]) / radius);
       gaps[i] = gaps[previous] + blend * (gaps[i] - gaps[previous]);
     }
   }
 }
 
-function distanceToSupport(gaps, path) {
+function distanceToSupport(gaps, path, closed) {
   const distances = new Float32Array(path.length).fill(Infinity);
   const last = path.length - 1;
+  const steps = last + (closed ? path.length : 0);
   for (const direction of [1, -1]) {
     let unsupportedLength = Infinity;
-    for (let offset = 0; offset <= last; offset++) {
-      const i = direction === 1 ? offset : last - offset;
+    for (let offset = 0; offset <= steps; offset++) {
+      const index = offset % path.length;
+      const i = direction === 1 ? index : last - index;
       if (gaps[i] <= 0.45) unsupportedLength = 0;
-      else if (offset > 0) unsupportedLength += distance(path[i], path[i - direction]);
+      else if (offset > 0) unsupportedLength += distance(path[i], path[(i - direction + path.length) % path.length]);
       distances[i] = Math.min(distances[i], unsupportedLength);
     }
   }
@@ -59,7 +63,7 @@ function applyGravity(paths, diameter, height, softness, supportSpacing) {
   const clearance = diameter * 0.19;
   const sampleSpacing = diameter * supportSpacing;
   const key = (x, y, z) => `${x}:${y}:${z}`;
-  for (const path of paths) {
+  for (const { points: path, closed } of paths) {
     const support = [];
     for (const point of path) {
       const [x, y, z] = point;
@@ -93,8 +97,8 @@ function applyGravity(paths, diameter, height, softness, supportSpacing) {
       bucket.set(sampleKey, point);
     }
 
-    const unsupportedLength = distanceToSupport(support, path);
-    smoothSupport(support, path, diameter * 0.8);
+    const unsupportedLength = distanceToSupport(support, path, closed);
+    smoothSupport(support, path, diameter * 0.8, closed);
     path.forEach((point, i) => {
       const [x, y, z] = point;
       const fraction = clamp(z / Math.max(height, diameter), 0, 1);
@@ -124,12 +128,21 @@ export function makeClayMesh(model, options) {
   const paths = [];
   let rings = 0;
   let segments = 0;
+  let caps = 0;
   for (const path of model.paths) {
     const sampled = samplePath(path, origin, step, minStep);
     if (sampled.length < 2) continue;
-    paths.push(sampled);
+    const start = sampled[0];
+    const end = sampled.at(-1);
+    const closed = path.length >= 4 && sampled.length >= 4
+      && Math.abs(start[2] - end[2]) <= 0.05
+      && distance(start, end) <= Math.min(diameter * 0.12, 0.6);
+    // A near-closed perimeter gets one shared ring in place of two overlapping caps.
+    if (closed) sampled.pop();
+    else caps += 2;
+    paths.push({ points: sampled, closed });
     rings += sampled.length;
-    segments += sampled.length - 1;
+    segments += closed ? sampled.length : sampled.length - 1;
     if (rings > maximumRings) throw new Error('This toolpath is too detailed to display. Try a smaller print.');
   }
 
@@ -139,8 +152,8 @@ export function makeClayMesh(model, options) {
   }
 
   const sides = Math.min(accurate ? 24 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
-  const positions = new Float32Array((rings * sides + paths.length * 2) * 3);
-  const indices = new Uint32Array((segments * sides * 2 + paths.length * sides * 2) * 3);
+  const positions = new Float32Array((rings * sides + caps) * 3);
+  const indices = new Uint32Array((segments * 2 + caps) * sides * 3);
   // A rounded rectangle gives adjacent layers wider contact than a round tube.
   const profile = Array.from({ length: sides }, (_, index) => {
     const angle = index * tau / sides;
@@ -151,17 +164,20 @@ export function makeClayMesh(model, options) {
   const beadRadius = diameter * (0.51 + 0.16 * softness);
   const beadHeight = diameter * (0.44 - 0.08 * softness);
 
-  for (const path of paths) {
+  for (const { points: path, closed } of paths) {
     const startRing = vertex;
     let sideX = 1;
     let sideZ = 0;
     for (let i = 0; i < path.length; i++) {
       const [x, y, z, load = 0] = path[i];
-      const previous = path[Math.max(i - 1, 0)];
-      const next = path[Math.min(i + 1, path.length - 1)];
-      const dx = next[0] - previous[0];
-      const dy = next[1] - previous[1];
-      const dz = next[2] - previous[2];
+      const previous = path[i - 1] ?? (closed ? path.at(-1) : path[i]);
+      const next = path[i + 1] ?? (closed ? path[0] : path[i]);
+      const incoming = distance(previous, path[i]) || 1;
+      const outgoing = distance(path[i], next) || 1;
+      // Give both segments equal influence at a turn, regardless of their sampled lengths.
+      const dx = (x - previous[0]) / incoming + (next[0] - x) / outgoing;
+      const dy = (y - previous[1]) / incoming + (next[1] - y) / outgoing;
+      const dz = (z - previous[2]) / incoming + (next[2] - z) / outgoing;
       const horizontal = Math.hypot(dx, dy);
       const tangentLength = Math.hypot(horizontal, dz) || 1;
       if (horizontal > 0.00001) {
@@ -179,15 +195,18 @@ export function makeClayMesh(model, options) {
         positions.set([x + sideX * width + upX * top, Math.max(0, z + beadHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
         vertex++;
       }
-      if (i === 0) continue;
-      const last = vertex - sides * 2;
+    }
+    const joins = closed ? path.length : path.length - 1;
+    for (let i = 0; i < joins; i++) {
+      const ring = startRing + i * sides;
+      const following = startRing + ((i + 1) % path.length) * sides;
       for (let j = 0; j < sides; j++) {
-        const a = last + j;
-        const b = last + (j + 1) % sides;
-        indices.set([a, b, a + sides, b, b + sides, a + sides], face);
+        const next = (j + 1) % sides;
+        indices.set([ring + j, ring + next, following + j, ring + next, following + next, following + j], face);
         face += 6;
       }
     }
+    if (closed) continue;
     const endRing = vertex - sides;
     for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
       positions.set([point[0], point[2] + beadHeight, -point[1]], vertex * 3);

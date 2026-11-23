@@ -12,6 +12,15 @@ const sceneColors = {
   grid: '#625085',
 };
 
+const studioKeyIntensity = 2.3;
+const softboxSamples = [
+  [-0.133, -0.044, 0.215],
+  [-0.049, 0.092, 0.145],
+  [0.071, -0.093, 0.18],
+  [0.117, 0.039, 0.15],
+];
+const softboxCenterWeight = 1 - softboxSamples.reduce((sum, sample) => sum + sample[2], 0);
+
 function floorGrid() {
   const material = new THREE.ShaderMaterial({
     transparent: true,
@@ -129,6 +138,7 @@ export function createViewer(container, axes, drafting) {
   const fill = light('#f6abd9', 0.52, 4, 2, 5);
   const keyDirection = key.position.clone().normalize();
   const rimDirection = rim.position.clone().normalize();
+  const studioRimDirection = new THREE.Vector3(1.8, 5.8, -6.3).normalize();
   key.shadow.mapSize.set(1024, 1024);
   key.shadow.bias = -0.0001;
   key.shadow.radius = 5;
@@ -162,7 +172,6 @@ export function createViewer(container, axes, drafting) {
   const studioTiers = new Map();
   let studioFloor;
   let studioProps;
-  let propsBounds;
   const studioBounds = new THREE.Box3();
   let studioFramed = false;
   clay.visible = false;
@@ -203,6 +212,7 @@ export function createViewer(container, axes, drafting) {
   function reset() {
     if (!clay.visible) return;
     studioFramed = false;
+    controls.enablePan = false;
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
@@ -213,8 +223,9 @@ export function createViewer(container, axes, drafting) {
   }
 
   function frameStudio() {
-    if (!studioProps?.visible || !clay.visible) return;
+    if (!studioProps?.group.visible || !clay.visible) return;
     studioFramed = true;
+    controls.enablePan = true;
     const { center, radius } = studioBounds.getBoundingSphere(new THREE.Sphere());
     const direction = new THREE.Vector3(0.16, 0.62, 1).normalize();
     const right = new THREE.Vector3(0, 1, 0).cross(direction).normalize();
@@ -234,6 +245,7 @@ export function createViewer(container, axes, drafting) {
       }
     }
     frame(center, direction, radius, distance * 1.14);
+    controls.minDistance = Math.min(45, controls.minDistance);
   }
 
   function resize() {
@@ -321,12 +333,11 @@ export function createViewer(container, axes, drafting) {
     const layoutScale = comparing ? 1 : scale;
     studioBounds.min.multiplyScalar(layoutScale);
     studioBounds.max.multiplyScalar(layoutScale);
-    studioProps.position.set(studioBounds.max.x - propsBounds.min.x + 300, studioFloor.position.y, -size.z * layoutScale * 0.16);
-    studioBounds.union(propsBounds.clone().translate(studioProps.position));
+    studioProps.placeBeside(studioBounds, studioFloor.position.y, size.z * layoutScale);
     const shadowExtent = Math.max(extent, studioBounds.getSize(new THREE.Vector3()).length() / 2);
     const range = shadowExtent * 1.35;
     const center = studioBounds.getCenter(new THREE.Vector3());
-    const shadowLights = [{ source: key, direction: keyDirection }, { source: rim, direction: rimDirection }, ...keySamples];
+    const shadowLights = [{ source: key, direction: keyDirection }, { source: rim, direction: studioRimDirection }, ...keySamples];
     for (const { source, direction } of shadowLights) {
       if (!source.castShadow || !source.visible) continue;
       source.target.position.copy(center);
@@ -373,7 +384,7 @@ export function createViewer(container, axes, drafting) {
     const changed = comparing !== active;
     comparing = active;
     printedDepth.visible = printedGhost.visible = active && clay.visible;
-    if (changed && studioProps?.visible && clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    if (changed && studioProps?.group.visible && clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     updateDraftingView();
   }
 
@@ -405,7 +416,7 @@ export function createViewer(container, axes, drafting) {
       key.shadow.mapSize.set(resolution, resolution);
     }
     key.shadow.radius = high ? 8 : 5;
-    // The weaker light on the opposite side casts its own broad, faint shadow.
+    // A broad, weak rim shadow crosses the key shadow at an angle.
     rim.castShadow = high;
     if (!high) {
       rim.shadow.map?.dispose();
@@ -414,18 +425,17 @@ export function createViewer(container, axes, drafting) {
       rim.position.copy(rimDirection);
     }
 
-    // Sample a finite softbox for gradual shadow edges at high quality.
+    // Unevenly spaced and weighted samples approximate the softbox's varying brightness.
     if (high && !keySamples.length) {
       const horizontal = new THREE.Vector3(0, 1, 0).cross(keyDirection).normalize();
       const vertical = keyDirection.clone().cross(horizontal);
-      for (const [x, y] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
-        const source = light('#fff9ee', 2.3 * 0.19, 0, 0, 0);
+      for (const [x, y, weight] of softboxSamples) {
+        const source = light('#fff9ee', studioKeyIntensity * weight, 0, 0, 0);
         source.target = key.target;
         source.shadow.mapSize.set(1024, 1024);
         source.shadow.radius = 5;
         source.shadow.bias = key.shadow.bias;
-        const direction = keyDirection.clone().addScaledVector(horizontal, x * 0.105)
-          .addScaledVector(vertical, y * 0.075).normalize();
+        const direction = keyDirection.clone().addScaledVector(horizontal, x).addScaledVector(vertical, y).normalize();
         keySamples.push({ source, direction });
       }
       studioAccents.push(
@@ -455,8 +465,7 @@ export function createViewer(container, axes, drafting) {
         studioFloor.receiveShadow = true;
         scene.add(studioFloor);
         studioProps = createStudioProps();
-        propsBounds = new THREE.Box3().setFromObject(studioProps);
-        scene.add(studioProps);
+        scene.add(studioProps.group);
         sizeStudioFloor();
       }
       studioFloor.material = studio.canvas;
@@ -472,14 +481,14 @@ export function createViewer(container, axes, drafting) {
     ambient.groundColor.set(active ? '#a69c92' : '#341649');
     ambient.intensity = active ? 0.66 : 2.05;
     key.color.set(active ? '#fff9ee' : '#fff0df');
-    key.intensity = active ? 2.3 * (high ? 0.24 : 1) : 2.65;
+    key.intensity = active ? studioKeyIntensity * (high ? softboxCenterWeight : 1) : 2.65;
     rim.color.set(high ? '#e7efff' : (active ? '#f7f5f2' : '#e6bbff'));
     rim.intensity = high ? 0.56 : (active ? 0.64 : 2.0);
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
     fill.intensity = active ? 0.33 : 0.52;
     grid.visible = !active;
     shadow.visible = !active;
-    if (studioFloor) studioFloor.visible = studioProps.visible = active;
+    if (studioFloor) studioFloor.visible = studioProps.group.visible = active;
     renderer.shadowMap.enabled = active;
     key.castShadow = active;
     clay.castShadow = clay.receiveShadow = active;

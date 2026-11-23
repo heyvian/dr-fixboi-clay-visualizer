@@ -1,0 +1,24 @@
+{
+  "name": "dr-fixboi-clay-visualizer",
+  "version": "1.0.0",
+  "description": "Browser-based G-code preview for clay 3D printing.",
+  "scripts": {
+    "test": "node --test",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build --base=./"
+  },
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@fontsource/archivo-black": "^5.3.0",
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.8"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

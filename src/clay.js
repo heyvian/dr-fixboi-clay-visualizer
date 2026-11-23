@@ -1,0 +1,166 @@
+const sides = 10;
+const maximumRings = 150_000;
+const tau = Math.PI * 2;
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+function distance(a, b) {
+  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+}
+
+function samplePath(path, origin, maxStep, minStep) {
+  const first = path[0].map((value, axis) => value - origin[axis]);
+  const samples = [first];
+  let previous = first;
+  for (let i = 1; i < path.length; i++) {
+    const point = path[i].map((value, axis) => value - origin[axis]);
+    const length = distance(previous, point);
+    if (length < minStep && i < path.length - 1) continue;
+    if (length < 0.00001) continue;
+    const steps = Math.ceil(length / maxStep);
+    for (let step = 1; step <= steps; step++) {
+      samples.push(point.map((value, axis) => previous[axis] + (value - previous[axis]) * step / steps));
+    }
+    previous = point;
+  }
+  return samples;
+}
+
+function applyGravity(paths, diameter, height, softness) {
+  const cells = new Map();
+  const cellWidth = diameter * 1.3;
+  const cellHeight = diameter * 1.12;
+  const clearance = diameter * 0.19;
+  const sampleSpacing = diameter * 0.32;
+  const key = (x, y, z) => `${x}:${y}:${z}`;
+  for (const path of paths) {
+    const support = [];
+    for (const point of path) {
+      const [x, y, z] = point;
+      const cellX = Math.floor(x / cellWidth);
+      const cellY = Math.floor(y / cellWidth);
+      const cellZ = Math.floor(z / cellHeight);
+      let nearest = 1;
+      if (z > cellHeight) {
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dz = -1; dz <= 0; dz++) {
+              const bucket = cells.get(key(cellX + dx, cellY + dy, cellZ + dz));
+              if (!bucket) continue;
+              for (const neighbor of bucket.values()) {
+                const rise = z - neighbor[2];
+                if (rise <= clearance || rise > cellHeight) continue;
+                const gap = Math.hypot(x - neighbor[0], y - neighbor[1]) / cellWidth;
+                nearest = Math.min(nearest, gap);
+              }
+            }
+          }
+        }
+      } else {
+        nearest = 0;
+      }
+      support.push(nearest);
+      const bucketKey = key(cellX, cellY, cellZ);
+      const bucket = cells.get(bucketKey) ?? new Map();
+      if (!bucket.size) cells.set(bucketKey, bucket);
+      const sampleKey = key(Math.floor(x / sampleSpacing), Math.floor(y / sampleSpacing), Math.floor(z / sampleSpacing));
+      bucket.set(sampleKey, point);
+    }
+
+    path.forEach((point, i) => {
+      const [x, y, z] = point;
+      const fraction = clamp(z / Math.max(height, diameter), 0, 1);
+      const localGap = (2 * support[i] + (support[i - 1] ?? support[i]) + (support[i + 1] ?? support[i])) / 4;
+      const compression = z * softness * (0.15 - 0.07 * fraction);
+      const sag = diameter * 2.7 * softness * localGap ** 1.5 * Math.min(1, z / diameter / 2);
+      const spread = 1 + 0.065 * softness * (1 - fraction) ** 2;
+      path[i] = [x * spread, y * spread, Math.max(0, z - compression - sag), (1 - fraction) * softness];
+    });
+  }
+}
+
+export function makeClayMesh(model, options) {
+  const diameter = clamp(Number(options.nozzle) || 2.4, 0.2, 30);
+  const softness = 1 - clamp(Number(options.viscosity) || 0, 0, 100) / 100;
+  const extent = Math.max(...model.dimensions, diameter);
+  const origin = [(model.low[0] + model.high[0]) / 2, (model.low[1] + model.high[1]) / 2, model.low[2]];
+  let length = 0;
+  let points = 0;
+  for (const path of model.paths) {
+    points += path.length;
+    for (let i = 1; i < path.length; i++) length += distance(path[i - 1], path[i]);
+  }
+  const step = Math.max(diameter * 0.7, extent / 200, length / 60_000);
+  const minStep = points < 70_000 ? 0.001 : Math.max(0.001, step * 0.7);
+  const paths = [];
+  let rings = 0;
+  let segments = 0;
+  for (const path of model.paths) {
+    const sampled = samplePath(path, origin, step, minStep);
+    if (sampled.length < 2) continue;
+    paths.push(sampled);
+    rings += sampled.length;
+    segments += sampled.length - 1;
+    if (rings > maximumRings) throw new Error('This toolpath is too detailed to display. Try a smaller print.');
+  }
+
+  const height = model.dimensions[2];
+  if (options.gravity && softness > 0) applyGravity(paths, diameter, height, softness);
+
+  const positions = new Float32Array((rings * sides + paths.length * 2) * 3);
+  const indices = new Uint32Array((segments * sides * 2 + paths.length * sides * 2) * 3);
+  const angles = Array.from({ length: sides }, (_, index) => index * tau / sides);
+  let vertex = 0;
+  let face = 0;
+
+  for (const path of paths) {
+    const startRing = vertex;
+    let sideX = 1;
+    let sideZ = 0;
+    const beadRadius = diameter * (0.51 + 0.16 * softness);
+    const beadHeight = diameter * (0.44 - 0.08 * softness);
+    for (let i = 0; i < path.length; i++) {
+      const [x, y, z, load = 0] = path[i];
+      const previous = path[Math.max(i - 1, 0)];
+      const next = path[Math.min(i + 1, path.length - 1)];
+      const dx = next[0] - previous[0];
+      const dy = next[1] - previous[1];
+      const dz = next[2] - previous[2];
+      const horizontal = Math.hypot(dx, dy);
+      const tangentLength = Math.hypot(horizontal, dz) || 1;
+      if (horizontal > 0.00001) {
+        sideX = -dy / horizontal;
+        sideZ = -dx / horizontal;
+      }
+      const upX = dz * sideZ / tangentLength;
+      const upY = (-dy * sideX - dx * sideZ) / tangentLength;
+      const upZ = -dz * sideX / tangentLength;
+      for (const angle of angles) {
+        const width = Math.cos(angle) * beadRadius * (1 + load * 0.27);
+        const top = Math.sin(angle) * beadHeight * (1 - load * 0.18);
+        positions.set([x + sideX * width + upX * top, Math.max(0, z + beadHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
+        vertex++;
+      }
+      if (i === 0) continue;
+      const last = vertex - sides * 2;
+      for (let j = 0; j < sides; j++) {
+        const a = last + j;
+        const b = last + (j + 1) % sides;
+        indices.set([a, b, a + sides, b, b + sides, a + sides], face);
+        face += 6;
+      }
+    }
+    const endRing = vertex - sides;
+    for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
+      positions.set([point[0], point[2] + beadHeight, -point[1]], vertex * 3);
+      for (let j = 0; j < sides; j++) {
+        const a = ring + j;
+        const b = ring + (j + 1) % sides;
+        indices.set(reverse ? [vertex, b, a] : [vertex, a, b], face);
+        face += 3;
+      }
+      vertex++;
+    }
+  }
+
+  return { positions, indices };
+}

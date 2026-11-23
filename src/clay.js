@@ -1,5 +1,5 @@
-const sides = 10;
 const maximumRings = 150_000;
+const maximumRingVertices = 1_800_000;
 const tau = Math.PI * 2;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -25,12 +25,24 @@ function samplePath(path, origin, maxStep, minStep) {
   return samples;
 }
 
-function applyGravity(paths, diameter, height, softness) {
+function smoothSupport(gaps, path, radius) {
+  const last = path.length - 1;
+  for (const direction of [1, -1]) {
+    for (let offset = 1; offset <= last; offset++) {
+      const i = direction === 1 ? offset : last - offset;
+      const previous = i - direction;
+      const blend = 1 - Math.exp(-distance(path[i], path[previous]) / radius);
+      gaps[i] = gaps[previous] + blend * (gaps[i] - gaps[previous]);
+    }
+  }
+}
+
+function applyGravity(paths, diameter, height, softness, supportSpacing) {
   const cells = new Map();
   const cellWidth = diameter * 1.3;
   const cellHeight = diameter * 1.12;
   const clearance = diameter * 0.19;
-  const sampleSpacing = diameter * 0.32;
+  const sampleSpacing = diameter * supportSpacing;
   const key = (x, y, z) => `${x}:${y}:${z}`;
   for (const path of paths) {
     const support = [];
@@ -66,12 +78,12 @@ function applyGravity(paths, diameter, height, softness) {
       bucket.set(sampleKey, point);
     }
 
+    smoothSupport(support, path, diameter * 0.8);
     path.forEach((point, i) => {
       const [x, y, z] = point;
       const fraction = clamp(z / Math.max(height, diameter), 0, 1);
-      const localGap = (2 * support[i] + (support[i - 1] ?? support[i]) + (support[i + 1] ?? support[i])) / 4;
       const compression = z * softness * (0.15 - 0.07 * fraction);
-      const sag = diameter * 2.7 * softness * localGap ** 1.5 * Math.min(1, z / diameter / 2);
+      const sag = diameter * 2.7 * softness * support[i] ** 1.5 * Math.min(1, z / diameter / 2);
       const spread = 1 + 0.065 * softness * (1 - fraction) ** 2;
       path[i] = [x * spread, y * spread, Math.max(0, z - compression - sag), (1 - fraction) * softness];
     });
@@ -81,6 +93,7 @@ function applyGravity(paths, diameter, height, softness) {
 export function makeClayMesh(model, options) {
   const diameter = clamp(Number(options.nozzle) || 2.4, 0.2, 30);
   const softness = 1 - clamp(Number(options.viscosity) || 0, 0, 100) / 100;
+  const accurate = options.quality === 'accurate';
   const extent = Math.max(...model.dimensions, diameter);
   const origin = [(model.low[0] + model.high[0]) / 2, (model.low[1] + model.high[1]) / 2, model.low[2]];
   let length = 0;
@@ -89,7 +102,7 @@ export function makeClayMesh(model, options) {
     points += path.length;
     for (let i = 1; i < path.length; i++) length += distance(path[i - 1], path[i]);
   }
-  const step = Math.max(diameter * 0.7, extent / 200, length / 60_000);
+  const step = Math.max(diameter * (accurate ? 0.4 : 0.7), extent / (accurate ? 330 : 200), length / (accurate ? 85_000 : 60_000));
   const minStep = points < 70_000 ? 0.001 : Math.max(0.001, step * 0.7);
   const paths = [];
   let rings = 0;
@@ -104,20 +117,27 @@ export function makeClayMesh(model, options) {
   }
 
   const height = model.dimensions[2];
-  if (options.gravity && softness > 0) applyGravity(paths, diameter, height, softness);
+  if (options.gravity && softness > 0) {
+    applyGravity(paths, diameter, height, softness, accurate ? 0.22 : 0.4);
+  }
 
+  const sides = Math.min(accurate ? 24 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
   const positions = new Float32Array((rings * sides + paths.length * 2) * 3);
   const indices = new Uint32Array((segments * sides * 2 + paths.length * sides * 2) * 3);
-  const angles = Array.from({ length: sides }, (_, index) => index * tau / sides);
+  // A rounded rectangle gives adjacent layers wider contact than a round tube.
+  const profile = Array.from({ length: sides }, (_, index) => {
+    const angle = index * tau / sides;
+    return [Math.cos(angle), Math.sin(angle)].map(value => Math.sign(value) * Math.abs(value) ** 0.58);
+  });
   let vertex = 0;
   let face = 0;
+  const beadRadius = diameter * (0.51 + 0.16 * softness);
+  const beadHeight = diameter * (0.44 - 0.08 * softness);
 
   for (const path of paths) {
     const startRing = vertex;
     let sideX = 1;
     let sideZ = 0;
-    const beadRadius = diameter * (0.51 + 0.16 * softness);
-    const beadHeight = diameter * (0.44 - 0.08 * softness);
     for (let i = 0; i < path.length; i++) {
       const [x, y, z, load = 0] = path[i];
       const previous = path[Math.max(i - 1, 0)];
@@ -134,9 +154,11 @@ export function makeClayMesh(model, options) {
       const upX = dz * sideZ / tangentLength;
       const upY = (-dy * sideX - dx * sideZ) / tangentLength;
       const upZ = -dz * sideX / tangentLength;
-      for (const angle of angles) {
-        const width = Math.cos(angle) * beadRadius * (1 + load * 0.27);
-        const top = Math.sin(angle) * beadHeight * (1 - load * 0.18);
+      const loadedRadius = beadRadius * (1 + load * 0.27);
+      const loadedHeight = beadHeight * (1 - load * 0.18);
+      for (const [across, vertical] of profile) {
+        const width = across * loadedRadius;
+        const top = vertical * loadedHeight;
         positions.set([x + sideX * width + upX * top, Math.max(0, z + beadHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
         vertex++;
       }

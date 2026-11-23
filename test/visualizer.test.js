@@ -116,3 +116,20 @@ test('compresses the sample vase with gravity and responds to viscosity', () => 
   assert.ok(soft[0] > withoutGravity[0]);
   assert.equal(soft.every(Number.isFinite), true);
 });
+
+test('Accurate adds bead detail while preserving the dimensions of the toolpath', () => {
+  const model = parseGcode('G0 Z1\nG1 X30 E1');
+  const settings = { nozzle: 6, viscosity: 100, gravity: false };
+  const fast = makeClayMesh(model, settings);
+  const accurate = makeClayMesh(model, { ...settings, quality: 'accurate' });
+  assert.ok(accurate.indices.length > fast.indices.length * 2);
+  assert.deepEqual(meshSize(accurate), meshSize(fast));
+});
+
+test('fully stiff clay produces the same mesh with gravity on or off', () => {
+  const model = parseGcode('G0 Z1\nG1 X20 E1\nG0 Y5 Z5\nG1 X0 E2');
+  const settings = { nozzle: 6, viscosity: 100, quality: 'accurate' };
+  const gravityOn = makeClayMesh(model, { ...settings, gravity: true });
+  const gravityOff = makeClayMesh(model, { ...settings, gravity: false });
+  assert.deepEqual(gravityOn, gravityOff);
+});

@@ -11,6 +11,7 @@ const byId = id => document.getElementById(id);
 const nozzle = byId('nozzle');
 const viscosity = byId('viscosity');
 const gravity = byId('gravity');
+const accurate = byId('quality-accurate');
 const fileInput = byId('file-input');
 const browse = byId('browse');
 const dropZone = byId('drop-zone');
@@ -87,7 +88,12 @@ if (viewer) {
     worker.postMessage({
       type,
       source,
-      settings: { nozzle: nozzleValue, viscosity: viscosity.valueAsNumber, gravity: gravity.checked },
+      settings: {
+        nozzle: nozzleValue,
+        viscosity: viscosity.valueAsNumber,
+        gravity: gravity.checked,
+        quality: accurate.checked ? 'accurate' : 'fast',
+      },
     });
   }
 
@@ -215,6 +221,7 @@ if (viewer) {
     settingsChanged();
   });
   gravity.addEventListener('change', settingsChanged);
+  byId('quality').addEventListener('change', settingsChanged);
   browse.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
     void loadFile(fileInput.files[0]);

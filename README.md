@@ -19,4 +19,4 @@ Run `npm test` for the G-code and simulation checks and `npm run build` to gener
 
 ## GitHub Pages
 
-In the repository settings, select **GitHub Actions** under **Pages → Build and deployment → Source**. Push to `main` or run **Deploy to GitHub Pages** manually in the Actions tab. The workflow checks the parser and simulation, builds the site, and publishes `dist/`. Built asset paths are relative so the app works at a repository subpath.
+GitHub Pages serves the built app from the root of the `main` branch. Run `npm run build:pages` after editing the app and commit the updated `index.html` and `pages-assets/` with your source changes. The workflow verifies the tests and checks that the committed site matches the build.

@@ -13,7 +13,7 @@ export function normalizeSettings(saved) {
     viscosity: numberOr(values.viscosity, 0, 100, 65),
     gravity: values.gravity !== false,
     quality: values.quality === 'accurate' ? 'accurate' : 'fast',
-    body: Object.hasOwn(clayBodies, values.body) ? values.body : 'm340',
+    body: Object.hasOwn(clayBodies, values.body) ? values.body : 'darkGranite',
     finish: values.finish === 'fired' ? 'fired' : 'greenware',
     rendering: values.rendering === true,
     drafting: values.drafting === true,

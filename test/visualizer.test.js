@@ -181,9 +181,14 @@ test('fired dimensions compound drying and firing shrinkage', () => {
   assert.ok(Math.abs(firedScale(clayBodies.polarIce) - 0.84976) < 0.000001);
 });
 
+test('PSH Dark Granite uses the published total cone 6 shrinkage', () => {
+  assert.equal(firedScale(clayBodies.darkGranite), 0.875);
+});
+
 test('restores saved controls and uses Fast for a first visit', () => {
   const settings = normalizeSettings();
   assert.equal(settings.quality, 'fast');
+  assert.equal(settings.body, 'darkGranite');
   assert.equal(settings.finish, 'greenware');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',

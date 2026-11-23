@@ -1,4 +1,11 @@
 export const clayBodies = {
+  darkGranite: {
+    name: 'PSH Dark Granite · cone 6 stoneware',
+    reference: 'https://psh.ca/products/20kg-psh-dark-granite-clay-cone-6',
+    totalShrinkage: 12.5,
+    greenware: { color: '#716c66', roughness: 0.82, grain: 0.057, fleck: '#534e49', density: 0.24 },
+    fired: { color: '#575452', roughness: 0.72, grain: 0.054, fleck: '#827c76', density: 0.38 },
+  },
   m340: {
     name: 'Plainsman M340 · buff stoneware',
     reference: 'https://www.plainsmanclays.com/product/m340/',
@@ -41,7 +48,8 @@ export const clayBodies = {
   },
 };
 
-export function firedScale({ dryingShrinkage, firingShrinkage }) {
+export function firedScale({ dryingShrinkage, firingShrinkage, totalShrinkage }) {
+  if (totalShrinkage !== undefined) return 1 - totalShrinkage / 100;
   const remainingLength = ([low, high]) => 1 - (low + high) / 200;
   return remainingLength(dryingShrinkage) * remainingLength(firingShrinkage);
 }

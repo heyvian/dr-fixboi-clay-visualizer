@@ -181,3 +181,23 @@ export function parseGcode(source) {
   }
   return { paths, low, high, dimensions, inferExtrusion, skippedArcs };
 }
+
+export function inspectToolpath(model, nozzle) {
+  const alerts = [];
+  const firstHeight = model.paths[0][0][2];
+  const lowestHeight = model.low[2];
+  const tolerance = Math.max(0.05, nozzle * 0.12);
+  const height = value => 'Z ' + Number(value.toFixed(2)) + ' mm';
+
+  if (firstHeight - lowestHeight > tolerance) {
+    alerts.push('The print starts at ' + height(firstHeight) + ' and later deposits at ' + height(lowestHeight) + '. Check the layer order.');
+  } else if (firstHeight > nozzle + tolerance) {
+    alerts.push('The first bead is at ' + height(firstHeight) + ', more than one nozzle diameter above Z0. Check the first layer and work offset.');
+  }
+  if (lowestHeight < -tolerance) {
+    alerts.push('The toolpath deposits below Z0 at ' + height(lowestHeight) + '. Check the work offset.');
+  }
+  if (model.inferExtrusion) alerts.push('No extrusion commands found. Showing horizontal print moves.');
+  if (model.skippedArcs) alerts.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
+  return alerts;
+}

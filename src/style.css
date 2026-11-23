@@ -316,8 +316,11 @@ a:hover { color: #291437; }
 .file-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .35rem .6rem; margin-top: .6rem; font: 500 .75rem var(--mono); }
 .file-actions button { border: 0; padding: 0; background: none; color: #5530a2; text-decoration: underline; text-underline-offset: 3px; }
 .file-actions button:hover { color: var(--ink); }
-.upload-status { margin: .6rem 0 0; font-size: .875rem; color: #553270; }
-.upload-status.has-error { color: #86153a; }
+.upload-status { margin: .6rem 0 0; font-size: .875rem; color: #86153a; }
+.code-alerts > div { margin-top: .65rem; padding: .55rem .65rem; border: 1px solid #a87037; background: #fff0d4; }
+.code-alerts h4 { margin: 0; font: 700 .8125rem var(--mono); text-transform: uppercase; }
+.code-alerts ul { margin: .35rem 0 0; padding-left: 1.1rem; font-size: .875rem; }
+.code-alerts li + li { margin-top: .25rem; }
 
 .setting { border-top: 1px solid #d8c9e3; padding-block: .95rem; }
 .nozzle-setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .35rem .5rem; }

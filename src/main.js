@@ -114,13 +114,12 @@ if (viewer) {
   let busy = false;
   let pendingSettings = false;
   let previewTimer;
-  let inferred = false;
-  let skippedArcs = 0;
+  let shownAlerts = [];
 
-  function updateStatus(message, isError = false) {
+  function updateStatus(message, renderError = false) {
     status.textContent = message;
     status.hidden = !message;
-    status.classList.toggle('has-error', isError);
+    status.dataset.renderError = String(renderError);
   }
 
   function updateSceneStatus() {
@@ -163,11 +162,15 @@ if (viewer) {
     previewTimer = setTimeout(flush, 80);
   };
 
-  function showFileDetails() {
-    const details = [];
-    if (inferred) details.push('No extrusion commands found. Showing horizontal print moves.');
-    if (skippedArcs) details.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
-    updateStatus(details.join(' '));
+  function showAlerts(alerts) {
+    if (shownAlerts.length === alerts.length && shownAlerts.every((message, index) => message === alerts[index])) return;
+    shownAlerts = alerts;
+    byId('code-alert-content').hidden = !alerts.length;
+    byId('code-alert-list').replaceChildren(...alerts.map(message => {
+      const item = document.createElement('li');
+      item.textContent = message;
+      return item;
+    }));
   }
 
   worker.addEventListener('message', ({ data }) => {
@@ -175,7 +178,7 @@ if (viewer) {
     const isLoad = data.type === 'load';
 
     if (data.error) {
-      updateStatus(data.error, true);
+      updateStatus(data.error, !isLoad);
       if (!currentName) byId('model-stats').textContent = 'Open a G-code file';
     } else {
       if (isLoad) {
@@ -185,11 +188,10 @@ if (viewer) {
         byId('file-name').title = currentName;
         restoreSample.hidden = currentIsSample;
       }
-      inferred = data.inferExtrusion;
-      skippedArcs = data.skippedArcs;
       const dimensions = viewer.setMesh(data.mesh, isLoad);
       renderPanel.setMeasurements(dimensions);
-      if (isLoad || !status.classList.contains('has-error')) showFileDetails();
+      if (isLoad || status.dataset.renderError === 'true') updateStatus('');
+      showAlerts(data.alerts);
       cameraButtons.forEach(button => { button.disabled = false; });
     }
 
@@ -205,7 +207,7 @@ if (viewer) {
     busy = false;
     upcoming = undefined;
     setFileBusy(false);
-    updateStatus('The preview could not start. Reload the page and try again.', true);
+    updateStatus('The preview could not start. Reload the page and try again.');
     updateSceneStatus();
   });
 
@@ -220,7 +222,7 @@ if (viewer) {
   async function loadFile(file) {
     if (!file || loadingFile || upcoming) return;
     if (file.size > sizeLimit) {
-      updateStatus('Choose a G-code file up to 25 MB.', true);
+      updateStatus('Choose a G-code file up to 25 MB.');
       return;
     }
     loadingFile = true;
@@ -230,7 +232,7 @@ if (viewer) {
     try {
       upcoming = { name: file.name, text: await file.text(), sample: false };
     } catch {
-      updateStatus('This file could not be read. Try opening it again.', true);
+      updateStatus('This file could not be read. Try opening it again.');
       setFileBusy(false);
     } finally {
       loadingFile = false;

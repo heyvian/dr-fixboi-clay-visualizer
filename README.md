@@ -6,7 +6,7 @@ Files are processed in a browser worker and stay on your device. Runny clay lays
 
 Use **Dimensions** to label the model in 3D. **Clay render** compares freshly printed greenware and unglazed cone 6 oxidation finishes under studio lighting. The Fired stage scales the mesh uniformly using the midpoint of each selected clay body's published wet-to-dry and dry-to-fired shrinkage ranges, applied in sequence. Each preset links to its Plainsman data sheet. The [SHAB test documentation](https://digitalfire.com/test/shab) explains how the two rates are measured. Treat the preview as an estimate and compare it with a sample made from your own clay and firing schedule. The browser saves the chosen settings locally.
 
-The parser supports linear moves, XY-plane arcs, absolute and relative coordinates and extrusion, inch and millimeter units, coordinate resets, and M101/M103-style extrusion. If the file contains no extrusion commands, the app shows horizontal print moves and flags that assumption. The app needs a WebGL 2 browser and accepts files up to 25 MB.
+The parser supports linear moves, XY-plane arcs, absolute and relative coordinates and extrusion, inch and millimeter units, coordinate resets, and M101/M103-style extrusion. G-code checks flag high starts, deposition below Z0, skipped arcs, and inferred extrusion. The app needs a WebGL 2 browser and accepts files up to 25 MB.
 
 ## Run locally
 

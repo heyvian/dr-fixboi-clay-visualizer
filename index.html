@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#241139">
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-BOUXLAnj.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-BA9umYxj.css">
+    <script type="module" crossorigin src="./pages-assets/index-1ADFJtv8.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-CbXFJRek.css">
   </head>
   <body>
     <div class="top-bar">
@@ -72,6 +72,12 @@
                 <button type="button" id="restore-sample" hidden>Load sample</button>
               </div>
               <p id="upload-status" class="upload-status" role="status" hidden></p>
+              <div class="code-alerts" role="status" id="code-alerts">
+                <div id="code-alert-content" hidden>
+                  <h4>Check G-code</h4>
+                  <ul id="code-alert-list"></ul>
+                </div>
+              </div>
             </section>
 
             <div class="setting nozzle-setting">

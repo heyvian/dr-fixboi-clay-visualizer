@@ -1,4 +1,4 @@
-import { parseGcode } from './gcode.js';
+import { inspectToolpath, parseGcode } from './gcode.js';
 import { makeClayMesh } from './clay.js';
 
 let model;
@@ -12,8 +12,7 @@ self.addEventListener('message', ({ data }) => {
     self.postMessage({
       type,
       mesh,
-      inferExtrusion: model.inferExtrusion,
-      skippedArcs: model.skippedArcs,
+      alerts: inspectToolpath(model, settings.nozzle),
     }, [mesh.positions.buffer, mesh.indices.buffer]);
   } catch (error) {
     self.postMessage({ type, error: error.message });

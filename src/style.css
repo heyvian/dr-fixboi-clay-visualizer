@@ -212,7 +212,7 @@ a:hover { color: #291437; }
 }
 .printed-key { color: #9ce8ff; }
 .fired-key { color: var(--green); }
-.camera-tools { position: absolute; display: grid; gap: .32rem; right: .9rem; top: .95rem; }
+.camera-tools { position: absolute; display: grid; justify-items: end; gap: .32rem; right: .9rem; top: .95rem; }
 .camera-tools button {
   width: 2.15rem;
   height: 2.15rem;
@@ -225,6 +225,7 @@ a:hover { color: #291437; }
 }
 .camera-tools button:hover { background: var(--lavender); color: var(--ink); }
 .camera-tools button:focus-visible { outline-color: var(--green); }
+.camera-tools #studio-view { width: auto; padding-inline: .45rem; font-size: .75rem; }
 .axis-key { position: absolute; bottom: .45rem; left: .5rem; width: 4.5rem; height: 3.88rem; pointer-events: none; }
 .scene-hint {
   position: absolute;

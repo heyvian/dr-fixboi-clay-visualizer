@@ -21,7 +21,7 @@ const restoreSample = byId('restore-sample');
 const status = byId('upload-status');
 const sceneStatus = byId('scene-status');
 const sceneError = byId('scene-error');
-const cameraButtons = [byId('zoom-in'), byId('zoom-out'), byId('reset-view')];
+const cameraButtons = ['zoom-in', 'zoom-out', 'reset-view', 'studio-view'].map(byId);
 const sampleName = 'sample-vase.gcode';
 const sample = makeSample();
 const settings = loadSettings();
@@ -262,6 +262,7 @@ if (viewer) {
   cameraButtons[0].addEventListener('click', () => viewer.zoom(0.84));
   cameraButtons[1].addEventListener('click', () => viewer.zoom(1 / 0.84));
   cameraButtons[2].addEventListener('click', viewer.reset);
+  cameraButtons[3].addEventListener('click', viewer.frameStudio);
   cameraButtons.forEach(button => { button.disabled = true; });
   loadSample();
 } else {

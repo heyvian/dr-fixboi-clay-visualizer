@@ -6,6 +6,8 @@ export function setupRenderPanel(viewer, settings) {
   const dimensionToggle = document.getElementById('dimension-toggle');
   const modelStats = document.getElementById('model-stats');
   const renderButton = document.getElementById('render-button');
+  const compareButton = document.getElementById('compare-button');
+  const comparisonKey = document.getElementById('comparison-key');
   const viewport = document.getElementById('viewport');
   const bodySelect = document.getElementById('clay-body');
   const reference = document.getElementById('clay-reference');
@@ -16,14 +18,14 @@ export function setupRenderPanel(viewer, settings) {
   const stages = ['greenware', 'fired'];
   let dimensions;
   let scale;
+  const isComparing = () => Boolean(viewer && settings.comparing);
+  const isFired = () => isComparing() || settings.finish === 'fired';
 
   for (const [id, body] of Object.entries(clayBodies)) {
     bodySelect.add(new Option(body.name, id));
   }
   bodySelect.value = settings.body;
-  document.getElementById('stage-' + settings.finish).checked = true;
   renderButton.disabled = !viewer;
-  dimensionToggle.disabled = !viewer;
 
   function showMeasurements() {
     if (!dimensions) return;
@@ -33,18 +35,23 @@ export function setupRenderPanel(viewer, settings) {
       printedRow.cells[index + 1].textContent = length;
       firedRow.cells[index + 1].textContent = firedLengths[index];
     });
-    const current = settings.finish === 'fired' ? firedLengths : lengths;
+    const current = isFired() ? firedLengths : lengths;
     modelStats.textContent = current.join(' × ') + ' mm';
   }
 
   function updateAppearance() {
     const body = clayBodies[settings.body];
-    const fired = settings.finish === 'fired';
+    const fired = isFired();
+    const stage = fired ? 'fired' : 'greenware';
+    const comparing = isComparing();
     scale = firedScale(body);
     reference.href = body.reference;
     shrinkageNote.textContent = percent.format(1 - scale) + ' estimated linear shrinkage from print to firing.';
     printedRow.classList.toggle('current-stage', !fired);
     firedRow.classList.toggle('current-stage', fired);
+    document.getElementById('stage-' + stage).checked = true;
+    compareButton.setAttribute('aria-pressed', String(comparing));
+    comparisonKey.hidden = !comparing;
 
     for (const stage of stages) {
       const swatch = document.getElementById('swatch-' + stage);
@@ -56,13 +63,21 @@ export function setupRenderPanel(viewer, settings) {
     renderButton.setAttribute('aria-pressed', String(rendering));
     viewport.classList.toggle('material-view', rendering);
     viewer?.setScale(fired ? scale : 1);
-    viewer?.setAppearance(rendering ? body[settings.finish] : undefined);
+    viewer?.setAppearance(rendering ? body[stage] : undefined);
+    viewer?.setComparison(comparing);
+    updateDrafting();
     showMeasurements();
   }
 
   function updateDrafting() {
-    dimensionToggle.setAttribute('aria-pressed', String(settings.drafting));
+    dimensionToggle.disabled = !viewer || isComparing();
+    dimensionToggle.setAttribute('aria-pressed', String(settings.drafting || isComparing()));
     viewer?.setDrafting(settings.drafting);
+  }
+
+  function showViewport() {
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    viewport.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'instant' : 'smooth' });
   }
 
   dimensionToggle.addEventListener('click', () => {
@@ -77,6 +92,7 @@ export function setupRenderPanel(viewer, settings) {
   });
   document.getElementById('clay-stage').addEventListener('change', event => {
     settings.finish = event.target.value;
+    settings.comparing = false;
     saveSettings(settings);
     updateAppearance();
   });
@@ -84,17 +100,20 @@ export function setupRenderPanel(viewer, settings) {
     settings.rendering = !settings.rendering;
     saveSettings(settings);
     updateAppearance();
-    if (settings.rendering) {
-      const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      viewport.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'instant' : 'smooth' });
-    }
+    if (settings.rendering) showViewport();
+  });
+  compareButton.addEventListener('click', () => {
+    settings.comparing = !settings.comparing;
+    saveSettings(settings);
+    updateAppearance();
+    if (settings.comparing) showViewport();
   });
 
   updateAppearance();
-  updateDrafting();
   return {
     setMeasurements(size) {
       dimensions = size;
+      compareButton.disabled = !viewer;
       showMeasurements();
     },
   };

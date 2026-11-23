@@ -1,3 +1,5 @@
+import { solveBeadFlow } from './bead-flow.js';
+
 const maximumRings = 150_000;
 const maximumRingVertices = 1_800_000;
 const tau = Math.PI * 2;
@@ -56,12 +58,12 @@ function distanceToSupport(gaps, path, closed) {
   return distances;
 }
 
-function applyGravity(paths, diameter, height, softness, supportSpacing) {
+function applyGravity(paths, diameter, height, softness, accurate) {
   const cells = new Map();
   const cellWidth = diameter * 1.3;
   const cellHeight = diameter * 1.12;
   const clearance = diameter * 0.19;
-  const sampleSpacing = diameter * supportSpacing;
+  const sampleSpacing = diameter * (accurate ? 0.22 : 0.4);
   const key = (x, y, z) => `${x}:${y}:${z}`;
   for (const { points: path, closed } of paths) {
     const support = [];
@@ -99,14 +101,22 @@ function applyGravity(paths, diameter, height, softness, supportSpacing) {
 
     const unsupportedLength = distanceToSupport(support, path, closed);
     smoothSupport(support, path, diameter * 0.8, closed);
+    const flow = accurate ? solveBeadFlow(path, {
+      diameter, buildHeight: height, softness, gaps: support, unsupportedLength, closed,
+    }) : undefined;
     path.forEach((point, i) => {
       const [x, y, z] = point;
       const fraction = clamp(z / Math.max(height, diameter), 0, 1);
-      const compression = z * softness * (0.15 - 0.07 * fraction);
-      const spanFactor = 1 - 0.65 * Math.exp(-unsupportedLength[i] / (2.2 * diameter));
-      const sag = diameter * 2.7 * softness * support[i] ** 1.5 * spanFactor * Math.min(1, z / diameter / 2);
+      let elevation = flow?.elevation[i];
+      if (!flow) {
+        const compression = z * softness * (0.15 - 0.07 * fraction);
+        const spanFactor = 1 - 0.65 * Math.exp(-unsupportedLength[i] / (2.2 * diameter));
+        const sag = diameter * 2.7 * softness * support[i] ** 1.5 * spanFactor * Math.min(1, z / diameter / 2);
+        elevation = Math.max(0, z - compression - sag);
+      }
       const spread = 1 + 0.065 * softness * (1 - fraction) ** 2;
-      path[i] = [x * spread, y * spread, Math.max(0, z - compression - sag), (1 - fraction) * softness];
+      const sectionScale = flow ? Math.sqrt(flow.area[i]) : 1;
+      path[i] = [x * spread, y * spread, elevation, (1 - fraction) * softness, sectionScale];
     });
   }
 }
@@ -148,7 +158,7 @@ export function makeClayMesh(model, options) {
 
   const height = model.dimensions[2];
   if (options.gravity && softness > 0) {
-    applyGravity(paths, diameter, height, softness, accurate ? 0.22 : 0.4);
+    applyGravity(paths, diameter, height, softness, accurate);
   }
 
   const sides = Math.min(accurate ? 24 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
@@ -169,7 +179,7 @@ export function makeClayMesh(model, options) {
     let sideX = 1;
     let sideZ = 0;
     for (let i = 0; i < path.length; i++) {
-      const [x, y, z, load = 0] = path[i];
+      const [x, y, z, load = 0, sectionScale = 1] = path[i];
       const previous = path[i - 1] ?? (closed ? path.at(-1) : path[i]);
       const next = path[i + 1] ?? (closed ? path[0] : path[i]);
       const incoming = distance(previous, path[i]) || 1;
@@ -187,12 +197,13 @@ export function makeClayMesh(model, options) {
       const upX = dz * sideZ / tangentLength;
       const upY = (-dy * sideX - dx * sideZ) / tangentLength;
       const upZ = -dz * sideX / tangentLength;
-      const loadedRadius = beadRadius * (1 + load * 0.27);
-      const loadedHeight = beadHeight * (1 - load * 0.18);
+      const loadedRadius = beadRadius * (1 + load * 0.27) * sectionScale;
+      const loadedHeight = beadHeight * (1 - load * 0.18) * sectionScale;
+      const centerHeight = z + beadHeight * sectionScale;
       for (const [across, vertical] of profile) {
         const width = across * loadedRadius;
         const top = vertical * loadedHeight;
-        positions.set([x + sideX * width + upX * top, Math.max(0, z + beadHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
+        positions.set([x + sideX * width + upX * top, Math.max(0, centerHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
         vertex++;
       }
     }
@@ -209,7 +220,7 @@ export function makeClayMesh(model, options) {
     if (closed) continue;
     const endRing = vertex - sides;
     for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
-      positions.set([point[0], point[2] + beadHeight, -point[1]], vertex * 3);
+      positions.set([point[0], point[2] + beadHeight * (point[4] ?? 1), -point[1]], vertex * 3);
       for (let j = 0; j < sides; j++) {
         const a = ring + j;
         const b = ring + (j + 1) % sides;

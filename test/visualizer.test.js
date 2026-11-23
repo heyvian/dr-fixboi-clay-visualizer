@@ -5,6 +5,7 @@ import { makeClayMesh } from '../src/clay.js';
 import { makeSample } from '../src/sample.js';
 import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
+import { solveBeadFlow } from '../src/bead-flow.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion } = parseGcode(`
@@ -151,6 +152,25 @@ test('fully stiff clay produces the same mesh with gravity on or off', () => {
   assert.deepEqual(gravityOn, gravityOff);
 });
 
+test('the yield-stress solver moves clay downhill and conserves bead volume', () => {
+  const path = [[0, 0, 0], [4, 0, 2], [8, 0, 4], [12, 0, 6]];
+  const { area } = solveBeadFlow(path, {
+    diameter: 6, buildHeight: 6, softness: 0.8, gaps: [0, 0, 0, 0], unsupportedLength: [0, 0, 0, 0], closed: false,
+  });
+  assert.ok(area[0] > 1.01);
+  assert.ok(area[3] < 0.99);
+  const weightedVolume = area[0] / 2 + area[1] + area[2] + area[3] / 2;
+  assert.ok(Math.abs(weightedVolume - 3) < 1e-9);
+});
+
+test('the yield-stress solver holds its shape below the flow threshold', () => {
+  const path = [[0, 0, 0], [4, 0, 0.1], [8, 0, 0.2]];
+  const { area } = solveBeadFlow(path, {
+    diameter: 6, buildHeight: 0.2, softness: 0.1, gaps: [0, 0, 0], unsupportedLength: [0, 0, 0], closed: false,
+  });
+  assert.deepEqual([...area], [1, 1, 1]);
+});
+
 test('near-closed perimeters share a seam ring while rising paths retain end caps', () => {
   const settings = { nozzle: 6, viscosity: 100, gravity: false };
   const perimeter = 'M83\nG0 Z1\nG1 X30 E1\nG1 Y30 E1\nG1 X0 E1\n';
@@ -217,7 +237,7 @@ test('restores saved controls and uses Fast for a first visit', () => {
   assert.equal(settings.finish, 'greenware');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
-    body: 'm390', finish: 'fired', rendering: true, drafting: true,
+    body: 'm390', finish: 'fired', rendering: true, drafting: true, comparing: true,
   };
   assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(saved))), saved);
   assert.deepEqual(normalizeSettings({ nozzle: 70, quality: 'other', body: '__proto__' }), settings);

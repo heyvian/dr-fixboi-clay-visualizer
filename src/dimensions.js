@@ -12,19 +12,16 @@ function keepVisible(start, end, extent, padding) {
   return Math.max(padding - Math.min(start, end), Math.min(0, extent - padding - Math.max(start, end)));
 }
 
-function strokeDimension(context) {
+function strokeDimension(context, color) {
   context.strokeStyle = '#392849';
   context.lineWidth = 2.8;
   context.stroke();
-  context.strokeStyle = '#e4fa83';
+  context.strokeStyle = color;
   context.lineWidth = 1.15;
   context.stroke();
 }
 
-export function drawDimensions(canvas, camera, bounds, width, height) {
-  const context = canvas.getContext('2d');
-  context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
-  context.clearRect(0, 0, width, height);
+function drawMeasurementSet(context, camera, bounds, width, height, treatment, labels) {
 
   const { min, max } = bounds;
   const center = bounds.getCenter(new Vector3());
@@ -39,11 +36,6 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
     [new Vector3(farSide, min.y, front), new Vector3(farSide, max.y, front), 'H'],
   ];
 
-  context.fillStyle = '#e4fa83';
-  context.font = '700 12px "IBM Plex Mono", monospace';
-  context.textBaseline = 'middle';
-  context.textAlign = 'center';
-
   edges.forEach(([start, end, axis], index) => {
     const [ax, ay] = project(start, camera, width, height);
     const [bx, by] = project(end, camera, width, height);
@@ -54,10 +46,10 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
     const mx = (ax + bx) / 2;
     const my = (ay + by) / 2;
     const outward = ((mx - middle[0]) * -uy + (my - middle[1]) * ux) >= 0 ? 1 : -1;
-    let offsetX = outward * -uy * 20;
-    let offsetY = outward * ux * 20;
+    let offsetX = outward * -uy * treatment.spacing;
+    let offsetY = outward * ux * treatment.spacing;
     offsetX += keepVisible(ax + offsetX, bx + offsetX, width, 12);
-    offsetY += keepVisible(ay + offsetY, by + offsetY, height, 23);
+    offsetY += keepVisible(ay + offsetY, by + offsetY, height, treatment.verticalPadding);
     const qx = ax + offsetX;
     const qy = ay + offsetY;
     const rx = bx + offsetX;
@@ -72,15 +64,44 @@ export function drawDimensions(canvas, camera, bounds, width, height) {
       context.lineTo(x, y);
       context.lineTo(x + direction * ux * arrow + uy * 3, y + direction * uy * arrow - ux * 3);
     }
-    strokeDimension(context);
+    strokeDimension(context, treatment.color);
 
     const label = axis + ' ' + formatLength(sizes[index]) + ' mm';
     const half = context.measureText(label).width / 2 + 5;
-    const tx = Math.min(width - half - 4, Math.max(half + 4, mx + offsetX));
-    const ty = Math.min(height - 11, Math.max(11, my + offsetY));
-    context.fillStyle = '#231634';
-    context.fillRect(tx - half, ty - 9, half * 2, 18);
-    context.fillStyle = '#e4fa83';
-    context.fillText(label, tx, ty + 0.5);
+    const x = Math.min(width - half - 4, Math.max(half + 4, qx + (rx - qx) * treatment.labelPosition));
+    const anchor = qy + (ry - qy) * treatment.labelPosition;
+    const choices = [0, -20, 20, -40, 40].map(offset => Math.min(height - 11, Math.max(11, anchor + offset)));
+    const y = choices.find(candidate => labels.every(label => Math.abs(x - label.x) >= half + label.half + 4
+      || Math.abs(candidate - label.y) >= 20)) ?? choices[0];
+    labels.push({ text: label, color: treatment.color, half, x, y });
   });
+}
+
+export function drawDimensions(canvas, camera, bounds, width, height, printedBounds) {
+  const context = canvas.getContext('2d');
+  context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.font = '700 12px "IBM Plex Mono", monospace';
+  context.textBaseline = 'middle';
+  context.textAlign = 'center';
+
+  const labels = [];
+  if (printedBounds) {
+    drawMeasurementSet(context, camera, printedBounds, width, height, {
+      color: '#9ce8ff', spacing: 43, labelPosition: 0.68, verticalPadding: 17,
+    }, labels);
+  }
+  drawMeasurementSet(context, camera, bounds, width, height, {
+    color: '#e4fa83',
+    spacing: printedBounds ? 15 : 20,
+    labelPosition: printedBounds ? 0.36 : 0.5,
+    verticalPadding: printedBounds ? 38 : 23,
+  }, labels);
+
+  for (const { text, half, x, y, color } of labels) {
+    context.fillStyle = '#231634';
+    context.fillRect(x - half, y - 9, half * 2, 18);
+    context.fillStyle = color;
+    context.fillText(text, x, y + 0.5);
+  }
 }

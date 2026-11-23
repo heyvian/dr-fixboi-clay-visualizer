@@ -17,6 +17,7 @@ export function normalizeSettings(saved) {
     finish: values.finish === 'fired' ? 'fired' : 'greenware',
     rendering: values.rendering === true,
     drafting: values.drafting === true,
+    comparing: values.comparing === true,
   };
 }
 

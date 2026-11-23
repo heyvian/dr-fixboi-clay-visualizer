@@ -95,6 +95,8 @@ function drawAxes(canvas, camera) {
 
 export function createViewer(container, axes, drafting) {
   const scene = new THREE.Scene();
+  const studioBackdrop = new THREE.Color('#817970');
+  const studioFog = new THREE.Fog(studioBackdrop);
   const camera = new THREE.PerspectiveCamera(34, 1, 0.01, 10_000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   let pixelRatio = Math.min(window.devicePixelRatio, 1.25);
@@ -141,13 +143,25 @@ export function createViewer(container, axes, drafting) {
     side: THREE.DoubleSide,
   });
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
+  const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
+    transparent: true, colorWrite: false,
+  }));
+  const printedGhost = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
+    color: '#9ce8ff', transparent: true, opacity: 0.2, depthWrite: false, depthFunc: THREE.EqualDepth, toneMapped: false,
+  }));
+  // Resolve the front surface first so overlapping beads receive one ghost layer.
+  printedDepth.renderOrder = 2;
+  printedGhost.renderOrder = 3;
+  printedDepth.visible = printedGhost.visible = false;
   let clayMaterial;
   let studioEnvironment;
   let studioFloor;
   clay.visible = false;
-  scene.add(clay);
+  scene.add(clay, printedDepth, printedGhost);
   const draftingBounds = new THREE.Box3();
   let shouldDraw = false;
+  let draftingEnabled = false;
+  let comparing = false;
 
   function render() {
     if (shouldDraw) return;
@@ -158,7 +172,8 @@ export function createViewer(container, axes, drafting) {
       drawAxes(axes, camera);
       if (!drafting.hidden && clay.visible) {
         draftingBounds.copy(clay.geometry.boundingBox).applyMatrix4(clay.matrixWorld);
-        drawDimensions(drafting, camera, draftingBounds, container.clientWidth, container.clientHeight);
+        const printedBounds = comparing ? clay.geometry.boundingBox : undefined;
+        drawDimensions(drafting, camera, draftingBounds, container.clientWidth, container.clientHeight, printedBounds);
       }
     });
   }
@@ -168,15 +183,17 @@ export function createViewer(container, axes, drafting) {
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const radius = sphere.radius * clay.scale.x;
+    const scale = comparing ? 1 : clay.scale.x;
+    const radius = sphere.radius * scale;
     const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
-    controls.target.copy(sphere.center).multiplyScalar(clay.scale.x);
+    controls.target.copy(sphere.center).multiplyScalar(scale);
     camera.position.copy(controls.target).addScaledVector(new THREE.Vector3(0.52, 0.4, 1).normalize(), distance);
     controls.minDistance = radius * 0.65;
     controls.maxDistance = distance * 4;
     camera.near = Math.max(distance / 5_000, 0.0001);
     camera.far = distance * 25;
     camera.updateProjectionMatrix();
+    sizeStudioFloor();
     controls.update();
     render();
   }
@@ -234,8 +251,9 @@ export function createViewer(container, axes, drafting) {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     clay.geometry.dispose();
-    clay.geometry = geometry;
+    clay.geometry = printedGhost.geometry = printedDepth.geometry = geometry;
     clay.visible = true;
+    printedDepth.visible = printedGhost.visible = comparing;
     const totalSize = Math.max(size.x, size.y, size.z);
     const spacing = 10 ** Math.floor(Math.log10(totalSize));
     grid.material.uniforms.interval.value = spacing;
@@ -256,8 +274,6 @@ export function createViewer(container, axes, drafting) {
     shadow.scale.set(Math.max(size.x * scale * 1.13, extent * 0.4), Math.max(size.z * scale * 1.13, extent * 0.4), 1);
     if (!renderer.shadowMap.enabled) return;
 
-    const floorWidth = extent * 9;
-    studioFloor.scale.set(floorWidth, floorWidth, 1);
     studioFloor.position.y = -extent * 0.00035;
     key.target.position.set(0, size.y * scale * 0.38, 0);
     key.position.copy(key.target.position).addScaledVector(keyDirection, extent * 3);
@@ -278,11 +294,30 @@ export function createViewer(container, axes, drafting) {
     render();
   }
 
-  function setDrafting(visible) {
-    drafting.hidden = !visible;
-    camera.zoom = visible ? 0.85 : 1;
+  function sizeStudioFloor() {
+    if (!studioFloor) return;
+    const width = camera.far * 3;
+    studioFloor.scale.set(width, width, 1);
+    studioFog.near = camera.far * 0.26;
+    studioFog.far = camera.far * 0.72;
+  }
+
+  function updateDraftingView() {
+    drafting.hidden = !(draftingEnabled || comparing);
+    camera.zoom = comparing ? 0.72 : (draftingEnabled ? 0.85 : 1);
     camera.updateProjectionMatrix();
     render();
+  }
+
+  function setDrafting(visible) {
+    draftingEnabled = visible;
+    updateDraftingView();
+  }
+
+  function setComparison(active) {
+    comparing = active;
+    printedDepth.visible = printedGhost.visible = active && clay.visible;
+    updateDraftingView();
   }
 
   function setQuality(quality) {
@@ -322,12 +357,15 @@ export function createViewer(container, axes, drafting) {
         studioFloor.rotation.x = -Math.PI / 2;
         studioFloor.receiveShadow = true;
         scene.add(studioFloor);
+        sizeStudioFloor();
       }
       clayMaterial.update(finish);
     }
 
     const active = Boolean(finish);
     clay.material = active ? clayMaterial.material : previewMaterial;
+    scene.background = active ? studioBackdrop : null;
+    scene.fog = active ? studioFog : null;
     scene.environment = active ? studioEnvironment.texture : null;
     scene.environmentIntensity = 0.58;
     renderer.toneMapping = active ? THREE.NeutralToneMapping : THREE.ACESFilmicToneMapping;
@@ -354,5 +392,5 @@ export function createViewer(container, axes, drafting) {
     render();
   }
 
-  return { setMesh, setAppearance, setScale, setDrafting, setQuality, zoom, reset };
+  return { setMesh, setAppearance, setScale, setDrafting, setComparison, setQuality, zoom, reset };
 }

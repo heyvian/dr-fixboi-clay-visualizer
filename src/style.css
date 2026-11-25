@@ -544,6 +544,7 @@ a:hover { color: #291437; }
 .switch-control input:disabled + .toggle { opacity: .55; }
 
 .quality-setting { padding-bottom: .22rem; }
+.viscosity-setting .setting-note,
 .quality-setting .setting-note { margin: .45rem 0 0; }
 .quality-choices { display: grid; grid-template-columns: 1fr 1fr; margin-top: .55rem; }
 .quality-choices label { position: relative; cursor: pointer; }

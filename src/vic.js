@@ -10,10 +10,11 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export const vicCauses = ['No load path', 'Span sag or tear', 'Overhang or bond yield', 'Compression yield'];
 
-function buildGraph(runs, diameter, stiffness, bedOffset) {
+function buildGraph(runs, diameter, stiffness) {
   const nodes = [];
   const columns = new Map();
   const cell = diameter * 0.9;
+  const bedTolerance = Math.max(0.05, diameter * 0.12);
   const gridKey = (x, y, z) => x + ':' + y + ':' + z;
   const ranges = [];
   for (const { points, edgeAreas, times, closed } of runs) {
@@ -35,7 +36,7 @@ function buildGraph(runs, diameter, stiffness, bedOffset) {
       const width = diameter * (1.34 - 0.32 * stiffness) * widthScale;
       const height = diameter * (0.72 + 0.16 * stiffness) * widthScale;
       const index = nodes.length;
-      const ground = z + bedOffset <= Math.max(0.22, diameter * 0.72);
+      const ground = z <= bedTolerance;
       const voxelX = Math.floor(x / cell);
       const voxelY = Math.floor(y / cell);
       const voxelZ = Math.floor(z / cell);
@@ -403,10 +404,10 @@ function pickHotspots(nodes, votes, cases, diameter) {
   return hotspots;
 }
 
-export function simulateVic(runs, { diameter, stiffness, gravity, bedOffset }) {
+export function simulateVic(runs, { diameter, stiffness, gravity }) {
   const votes = new Uint8Array(runs.reduce((sum, run) => sum + run.points.length, 0));
   if (!gravity) return { votes, hotspots: [], totalCases: strengths.length, frames, buildFrames, gravity };
-  const graph = buildGraph(runs, diameter, stiffness, bedOffset);
+  const graph = buildGraph(runs, diameter, stiffness);
   const { nodes } = graph;
   const count = nodes.length;
 

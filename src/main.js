@@ -214,7 +214,8 @@ if (viewer) {
         byId('file-name').title = currentName;
         restoreSample.hidden = currentIsSample;
       }
-      const dimensions = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight);
+      const { dimensions, raisedHeight } = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight);
+      showChecks(data.alerts, data.placementWarning, raisedHeight);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');
       if (!pendingSettings && !loadingFile && (isLoad || !upcoming)) vicPanel.finish(data.mesh.analysis);

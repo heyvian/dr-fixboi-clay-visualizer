@@ -289,7 +289,7 @@ export function createViewer(container, axes, drafting) {
     event.preventDefault();
   });
 
-  function setMesh(mesh, fit, placementOrigin, height = 0) {
+  function setMesh(mesh, fit, placementOrigin, estimatedGap = 0) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
@@ -310,7 +310,9 @@ export function createViewer(container, axes, drafting) {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     vicDisplay.setMesh(geometry, mesh.analysis);
-    raisedHeight = height;
+    // Use the placed clay's underside for the readout. A nominally seated
+    // toolpath can have small gaps in the generated curved bead profile.
+    raisedHeight = estimatedGap && Number.isFinite(min.y) ? Math.max(0, min.y) : 0;
     clay.position.y = raisedHeight * (1 - clay.scale.x);
     originGuide.setMesh(mesh, placementOrigin, raisedHeight);
     clay.geometry.dispose();
@@ -328,7 +330,7 @@ export function createViewer(container, axes, drafting) {
     updateShadow(size);
     if (fit) reset();
     render();
-    return [size.x, size.z, size.y];
+    return { dimensions: [size.x, size.z, size.y], raisedHeight };
   }
 
   function updateShadow(size) {

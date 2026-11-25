@@ -161,7 +161,7 @@ export function createOriginGuide() {
     placement = mesh && getOriginPlacement(mesh.positions, origin);
     footprintRadius = placement?.radius ?? (mesh && height ? getFootprintRadius(mesh.positions) : 0);
     raisedHeight = mesh ? height : 0;
-    setLabel(originLabel, placement ? [Number(placement.distance.toFixed(2)) + ' mm to origin'] : undefined);
+    setLabel(originLabel, placement ? [Number(placement.distance.toFixed(2)) + ' mm from origin'] : undefined);
     setLabel(raisedLabel, raisedHeight ? [formatRaisedHeight(raisedHeight), 'above Z0'] : undefined);
   }
 

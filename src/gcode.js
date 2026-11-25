@@ -1,4 +1,5 @@
 const wordPattern = /([A-Z])\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))/g;
+const layerSetting = /^\s*;\s*(first_layer_height|initial_layer_print_height|layer_height_0|layer_height)\s*[:=]\s*(\d+(?:\.\d*)?|\.\d+)\s*(%)?\s*(?:;.*)?$/i;
 const tau = 2 * Math.PI;
 const maximumSegments = 300_000;
 
@@ -64,6 +65,8 @@ export function parseGcode(source) {
   let lastMode;
   let elapsed = 0;
   let feed = 1500;
+  let layerHeight;
+  let firstLayer;
   const axes = ['X', 'Y', 'Z'];
   const tools = new Map([[0, { e: 0, retracted: 0 }]]);
   const explicit = [];
@@ -73,6 +76,19 @@ export function parseGcode(source) {
   const inferredTimes = [];
 
   for (const rawLine of source.split(/\r?\n|\r/)) {
+    const setting = rawLine.match(layerSetting);
+    if (setting) {
+      const [, key, value, percent] = setting;
+      const height = Number(value);
+      if (height > 0 && Number.isFinite(height)) {
+        if (key.toLowerCase() === 'layer_height') {
+          if (!percent) layerHeight = height;
+        } else {
+          firstLayer = { height, percent: Boolean(percent) };
+        }
+      }
+      continue;
+    }
     const line = rawLine.split(';', 1)[0].replace(/\([^)]*\)/g, '').split('*', 1)[0].toUpperCase();
     const words = new Map();
     let moves = false;
@@ -211,12 +227,17 @@ export function parseGcode(source) {
   if (Math.max(...dimensions) > 1_000_000 || !dimensions.every(Number.isFinite)) {
     throw new Error('The print dimensions exceed the preview range. Check the file units.');
   }
+  const firstLayerHeight = firstLayer?.percent ? layerHeight * firstLayer.height / 100 : firstLayer?.height ?? layerHeight;
   return { paths, low, high, dimensions, inferExtrusion, skippedArcs,
+    firstLayerHeight: firstLayerHeight > 0 && Number.isFinite(firstLayerHeight) ? firstLayerHeight : undefined,
     extrusion: inferExtrusion ? undefined : extrusion, times: inferExtrusion ? inferredTimes : explicitTimes };
 }
 
-export function getRaisedHeight(model) {
-  return model.low[2] > 1e-6 ? model.low[2] : 0;
+export function estimateBedGap(model, nozzle) {
+  // Slicers can put the nozzle one layer above the bed on a seated print.
+  const layer = model.firstLayerHeight ?? nozzle * 0.5;
+  const gap = model.low[2] - layer;
+  return gap > 1e-6 ? gap : 0;
 }
 
 export function formatRaisedHeight(height) {
@@ -244,5 +265,5 @@ export function inspectToolpath(model, nozzle) {
   const placementOrigin = placementWarning ? [-centerX, centerY] : undefined;
   if (model.inferExtrusion) alerts.push('No extrusion commands found. Showing horizontal print moves.');
   if (model.skippedArcs) alerts.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
-  return { alerts, placementWarning, placementOrigin, raisedHeight: getRaisedHeight(model) };
+  return { alerts, placementWarning, placementOrigin, raisedHeight: estimateBedGap(model, nozzle) };
 }

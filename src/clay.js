@@ -1,5 +1,5 @@
 import { solveBeadFlow } from './bead-flow.js';
-import { getRaisedHeight } from './gcode.js';
+import { estimateBedGap } from './gcode.js';
 import { defaultNozzle } from './settings.js';
 import { simulateVic } from './vic.js';
 
@@ -222,11 +222,9 @@ export function makeClayMesh(model, options) {
   const accurate = options.quality === 'accurate' || vic;
   const extent = Math.max(...model.dimensions, diameter);
   const origin = [(model.low[0] + model.high[0]) / 2, (model.low[1] + model.high[1]) / 2, model.low[2]];
-  // Keep the printer's bed height in VIC. Fast and Accurate work relative to the
-  // first layer and apply the toolpath's lift when writing the preview geometry.
-  const raisedHeight = getRaisedHeight(model);
-  if (vic && raisedHeight) origin[2] = 0;
-  const lift = vic ? 0 : raisedHeight;
+  const bedGap = estimateBedGap(model, diameter);
+  // VIC runs in bed coordinates so free clay still collides with the real bed.
+  if (vic) origin[2] -= bedGap;
   let length = 0;
   let points = 0;
   let totalExtrusion = 0;
@@ -267,9 +265,7 @@ export function makeClayMesh(model, options) {
   const sides = Math.min(vic ? 24 : accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
   const positions = new Float32Array((rings * sides + caps) * 3);
   const indices = new Uint32Array((segments * 2 + caps) * sides * 3);
-  const analysis = vic ? simulateVic(paths, {
-    diameter, stiffness: 1 - softness, gravity: options.gravity, bedOffset: Math.max(0, origin[2]),
-  }) : undefined;
+  const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
   const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
   const cuts = [];
   let nodeIndex = 0;
@@ -316,7 +312,7 @@ export function makeClayMesh(model, options) {
       for (const [across, vertical] of profile) {
         const width = across * loadedRadius;
         const top = vertical * loadedHeight;
-        positions.set([x + sideX * width + upX * top, lift + Math.max(0, centerHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
+        positions.set([x + sideX * width + upX * top, Math.max(0, centerHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
         if (nodeIds) nodeIds[vertex] = nodeIndex;
         vertex++;
       }
@@ -344,7 +340,7 @@ export function makeClayMesh(model, options) {
     const endRing = vertex - sides;
     for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
       const scale = point[4] ?? Math.sqrt((reverse ? edgeAreas?.[0] : edgeAreas?.at(-1)) ?? 1);
-      positions.set([point[0], lift + point[2] + beadHeight * scale / (point[5] ?? 1), -point[1]], vertex * 3);
+      positions.set([point[0], point[2] + beadHeight * scale / (point[5] ?? 1), -point[1]], vertex * 3);
       if (nodeIds) nodeIds[vertex] = reverse ? firstNode : nodeIndex - 1;
       for (let j = 0; j < sides; j++) {
         const a = ring + j;
@@ -361,6 +357,15 @@ export function makeClayMesh(model, options) {
     analysis.cuts = new Uint32Array(cuts);
     analysis.stripLength = sides * 6;
     analysis.diameter = diameter;
+  } else if (positions.length) {
+    // Seat the underside of the generated clay at the estimated gap. Sag and
+    // bead roundness can move that underside relative to the lowest path point.
+    let bottom = Infinity;
+    for (let i = 1; i < positions.length; i += 3) bottom = Math.min(bottom, positions[i]);
+    const lift = bedGap - bottom;
+    if (lift) {
+      for (let i = 1; i < positions.length; i += 3) positions[i] += lift;
+    }
   }
   return { positions, indices, analysis };
 }

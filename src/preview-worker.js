@@ -18,7 +18,7 @@ self.addEventListener('message', ({ data }) => {
       if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer, failure.buffer);
       delete mesh.analysis.tears;
     }
-    self.postMessage({ type, mesh, placementOrigin, raisedHeight }, transfers);
+    self.postMessage({ type, mesh, alerts, placementWarning, placementOrigin, raisedHeight }, transfers);
   } catch (error) {
     self.postMessage({ type, error: error.message });
   }

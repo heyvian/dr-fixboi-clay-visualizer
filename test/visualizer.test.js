@@ -100,22 +100,34 @@ test('G-code checks use the first deposited bead and flag out-of-order layers', 
   const printHighFirst = parseGcode('G0 Z8\nG1 X10 E1\nG0 Z1\nG1 X20 E2');
   const outOfOrder = inspectToolpath(printHighFirst, 2.4);
   assert.match(outOfOrder.alerts[0], /starts at Z 8 mm and later deposits at Z 1 mm/);
-  assert.equal(outOfOrder.raisedHeight, 1);
+  assert.equal(outOfOrder.raisedHeight, 0);
 });
 
-test('a positive minimum deposited Z warns and remains visible in every preview quality', () => {
-  const raised = parseGcode('G0 Z0\nG0 Z0.25\nG1 X10 E1');
-  assert.equal(inspectToolpath(raised, 4).raisedHeight, 0.25);
+test('the estimated first layer seats the clay and preserves genuine bed gaps in every preview quality', () => {
+  const seated = parseGcode('G0 Z0\nG0 Z2\nG1 X10 E1');
+  const raised = parseGcode('G0 Z0\nG0 Z6\nG1 X10 E1');
+  assert.equal(inspectToolpath(seated, 4).raisedHeight, 0);
+  assert.equal(inspectToolpath(raised, 4).raisedHeight, 4);
   for (const quality of ['fast', 'accurate', 'vic']) {
-    const { positions } = makeClayMesh(raised, { quality, nozzle: 4, viscosity: 100, gravity: true });
-    let bottom = Infinity;
-    for (let i = 1; i < positions.length; i += 3) bottom = Math.min(bottom, positions[i]);
-    assert.equal(bottom, 0.25, quality);
+    for (const [model, expected] of [[seated, 0], [raised, 4]]) {
+      const { positions } = makeClayMesh(model, { quality, nozzle: 4, viscosity: 65, gravity: true });
+      let bottom = Infinity;
+      for (let i = 1; i < positions.length; i += 3) bottom = Math.min(bottom, positions[i]);
+      assert.equal(bottom, expected, quality);
+    }
   }
   const below = parseGcode('G0 Z-1\nG1 X10 E1');
   const belowBed = inspectToolpath(below, 2.4);
   assert.equal(belowBed.raisedHeight, 0);
   assert.match(belowBed.alerts[0], /deposits below Z0/);
+});
+
+test('uses declared first-layer thickness ahead of the nozzle estimate', () => {
+  const seated = parseGcode('G0 Z3\nG1 X10 E1\n; first_layer_height = 150%\n; layer_height = 2');
+  assert.equal(seated.firstLayerHeight, 3);
+  assert.equal(inspectToolpath(seated, 4).raisedHeight, 0);
+  const raised = parseGcode('; initial_layer_print_height = 0.5\nG0 Z2\nG1 X10 E1');
+  assert.equal(inspectToolpath(raised, 4).raisedHeight, 1.5);
 });
 
 test('warns when the deposited footprint is more than 50 mm from the XY origin', () => {
@@ -130,12 +142,12 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
 
   assert.deepEqual(alertsFor(0, 0).alerts, []);
   assert.deepEqual(alertsFor(30, 39).alerts, []);
-  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined, placementOrigin: undefined, raisedHeight: 1 });
+  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined, placementOrigin: undefined, raisedHeight: 0 });
   assert.deepEqual(alertsFor(-36, 48), {
     alerts: [],
     placementWarning: '60 mm off center from X0 Y0',
     placementOrigin: [36, 48],
-    raisedHeight: 1,
+    raisedHeight: 0,
   });
 });
 

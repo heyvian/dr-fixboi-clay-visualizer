@@ -206,6 +206,13 @@ a:hover { color: #291437; }
   letter-spacing: .025em;
 }
 .scene-status i { width: .43rem; height: .43rem; background: var(--green); box-shadow: 0 0 .5rem #d8fc7b55; }
+.scene-placement {
+  padding: .35rem .55rem;
+  border: 1px solid #e0a567;
+  background: #4b2a16;
+  color: #fff0d4;
+  font: 700 .75rem var(--mono);
+}
 .comparison-key {
   gap: .7rem;
   font: 700 .75rem var(--mono);

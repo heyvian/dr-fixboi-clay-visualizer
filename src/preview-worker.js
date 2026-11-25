@@ -7,6 +7,7 @@ self.addEventListener('message', ({ data }) => {
   const { type, source, settings } = data;
   try {
     const next = type === 'load' ? parseGcode(source) : model;
+    self.postMessage({ type: 'checks', ...inspectToolpath(next, settings.nozzle) });
     const mesh = makeClayMesh(next, settings);
     model = next;
     const transfers = [mesh.positions.buffer, mesh.indices.buffer];
@@ -16,11 +17,7 @@ self.addEventListener('message', ({ data }) => {
       if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer, failure.buffer);
       delete mesh.analysis.tears;
     }
-    self.postMessage({
-      type,
-      mesh,
-      alerts: inspectToolpath(model, settings.nozzle),
-    }, transfers);
+    self.postMessage({ type, mesh }, transfers);
   } catch (error) {
     self.postMessage({ type, error: error.message });
   }

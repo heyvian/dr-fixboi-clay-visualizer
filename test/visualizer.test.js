@@ -93,17 +93,17 @@ test('infers horizontal print moves for files without extrusion commands', () =>
 
 test('G-code checks use the first deposited bead and flag out-of-order layers', () => {
   const travelFirst = parseGcode('G0 Z35\nG0 Z2\nG1 X10 E1');
-  assert.deepEqual(inspectToolpath(travelFirst, 2.4), []);
+  assert.deepEqual(inspectToolpath(travelFirst, 2.4).alerts, []);
   const printHighFirst = parseGcode('G0 Z8\nG1 X10 E1\nG0 Z1\nG1 X20 E2');
-  assert.match(inspectToolpath(printHighFirst, 2.4)[0], /starts at Z 8 mm and later deposits at Z 1 mm/);
+  assert.match(inspectToolpath(printHighFirst, 2.4).alerts[0], /starts at Z 8 mm and later deposits at Z 1 mm/);
 });
 
 test('G-code checks flag an unusually high first bead and below-bed deposition', () => {
   const high = parseGcode('G0 Z12\nG1 X10 E1');
   const below = parseGcode('G0 Z-1\nG1 X10 E1');
-  assert.match(inspectToolpath(high, 2.4)[0], /first bead is at Z 12 mm/);
-  assert.deepEqual(inspectToolpath(high, 12), []);
-  assert.match(inspectToolpath(below, 2.4)[0], /deposits below Z0/);
+  assert.match(inspectToolpath(high, 2.4).alerts[0], /first bead is at Z 12 mm/);
+  assert.deepEqual(inspectToolpath(high, 12).alerts, []);
+  assert.match(inspectToolpath(below, 2.4).alerts[0], /deposits below Z0/);
 });
 
 test('warns when the deposited footprint is more than 50 mm from the XY origin', () => {
@@ -116,10 +116,13 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
     G1 Y${y - 20} E4
   `), 4);
 
-  assert.deepEqual(alertsFor(0, 0), []);
-  assert.deepEqual(alertsFor(30, 39), []);
-  assert.deepEqual(alertsFor(30, 40), []);
-  assert.deepEqual(alertsFor(-36, 48), ['Your object appears to be 60 mm off center from X0 Y0.']);
+  assert.deepEqual(alertsFor(0, 0).alerts, []);
+  assert.deepEqual(alertsFor(30, 39).alerts, []);
+  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined });
+  assert.deepEqual(alertsFor(-36, 48), {
+    alerts: ['Your object appears to be 60 mm off center from X0 Y0.'],
+    placementWarning: '60 mm off center from X0 Y0',
+  });
 });
 
 test('VIC keeps a short vertical wall standing and demonstrates a failed overhang', () => {

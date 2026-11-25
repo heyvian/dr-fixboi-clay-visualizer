@@ -20,6 +20,7 @@ const dropZone = byId('drop-zone');
 const restoreSample = byId('restore-sample');
 const status = byId('upload-status');
 const sceneStatus = byId('scene-status');
+const scenePlacement = byId('scene-placement');
 const vicLoading = byId('vic-loading');
 const sceneError = byId('scene-error');
 const cameraButtons = ['zoom-in', 'zoom-out', 'reset-view', 'studio-view'].map(byId);
@@ -142,6 +143,7 @@ if (viewer) {
 
   function send(type, source) {
     busy = true;
+    if (type === 'load') showChecks([]);
     vicPanel.begin(settings.quality === 'vic');
     updateSceneStatus();
     const { nozzle, viscosity, gravity, quality } = settings;
@@ -172,7 +174,9 @@ if (viewer) {
     previewTimer = setTimeout(flush, 80);
   };
 
-  function showAlerts(alerts) {
+  function showChecks(alerts, placementWarning) {
+    scenePlacement.hidden = !placementWarning;
+    scenePlacement.textContent = placementWarning ?? '';
     if (shownAlerts.length === alerts.length && shownAlerts.every((message, index) => message === alerts[index])) return;
     shownAlerts = alerts;
     byId('code-alert-content').hidden = !alerts.length;
@@ -184,6 +188,10 @@ if (viewer) {
   }
 
   worker.addEventListener('message', ({ data }) => {
+    if (data.type === 'checks') {
+      showChecks(data.alerts, data.placementWarning);
+      return;
+    }
     busy = false;
     const isLoad = data.type === 'load';
 
@@ -202,7 +210,6 @@ if (viewer) {
       const dimensions = viewer.setMesh(data.mesh, isLoad);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');
-      showAlerts(data.alerts);
       if (!pendingSettings && !loadingFile && (isLoad || !upcoming)) vicPanel.finish(data.mesh.analysis);
       cameraButtons.forEach(button => { button.disabled = false; });
     }

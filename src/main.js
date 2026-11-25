@@ -144,7 +144,10 @@ if (viewer) {
 
   function send(type, source) {
     busy = true;
-    if (type === 'load') showChecks([]);
+    if (type === 'load') {
+      viewer.clearPlacement();
+      showChecks([]);
+    }
     vicPanel.begin(settings.quality === 'vic');
     updateSceneStatus();
     const { nozzle, viscosity, gravity, quality } = settings;
@@ -177,7 +180,7 @@ if (viewer) {
 
   function showChecks(alerts, placementWarning) {
     scenePlacement.hidden = !placementWarning;
-    scenePlacementDetail.textContent = placementWarning ?? '';
+    if (scenePlacementDetail.textContent !== (placementWarning ?? '')) scenePlacementDetail.textContent = placementWarning ?? '';
     if (shownAlerts.length === alerts.length && shownAlerts.every((message, index) => message === alerts[index])) return;
     shownAlerts = alerts;
     byId('code-alert-content').hidden = !alerts.length;
@@ -208,7 +211,7 @@ if (viewer) {
         byId('file-name').title = currentName;
         restoreSample.hidden = currentIsSample;
       }
-      const dimensions = viewer.setMesh(data.mesh, isLoad);
+      const dimensions = viewer.setMesh(data.mesh, isLoad, data.placementOrigin);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');
       if (!pendingSettings && !loadingFile && (isLoad || !upcoming)) vicPanel.finish(data.mesh.analysis);

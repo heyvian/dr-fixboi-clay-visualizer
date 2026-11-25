@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-B3cejKIs.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-mEDNY3tb.css">
+    <script type="module" crossorigin src="./pages-assets/index-MLfYJPGn.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-BKa5tOlh.css">
   </head>
   <body>
     <div class="top-bar">
@@ -42,9 +42,11 @@
               <span class="toggle" aria-hidden="true"></span>
             </label>
           </div>
-          <div id="scene-placement" class="scene-placement" aria-hidden="true" hidden>
-            <span class="mark"><span class="pixel-pot"></span><span class="spark sparkle-one">✦</span></span>
-            <div class="placement-copy"><strong>High alert</strong><span id="scene-placement-detail"></span></div>
+          <div role="status">
+            <div id="scene-placement" class="scene-placement" hidden>
+              <span class="mark" aria-hidden="true"><span class="alarm-beacon"></span><span class="alarm-rays">✦</span></span>
+              <div class="placement-copy"><strong>High alert</strong><span id="scene-placement-detail"></span></div>
+            </div>
           </div>
           <div id="viewport" class="viewport">
             <div id="scene" class="scene" aria-label="Interactive 3D view of the clay print"></div>
@@ -227,7 +229,7 @@
     <dialog id="help-dialog" class="window info-dialog" aria-labelledby="help-title">
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
       <div class="dialog-content">
-        <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Look for Check G-code alerts, such as a first bead that starts too high.</p>
+        <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Check G-code flags issues such as a first bead that starts too high. A high alert flags off-center prints. Zoom out to bring X0 Y0 and the distance to the nearest edge into view.</p>
         <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. Experimental VIC highlights failure hotspots and demonstrates deposition, tearing, and collapse.</p>
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>

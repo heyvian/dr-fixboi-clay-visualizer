@@ -4,6 +4,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { createClayMaterial } from './clay-material.js';
 import { createCanvasMaterial } from './canvas-material.js';
 import { drawDimensions } from './dimensions.js';
+import { createOriginGuide } from './origin-guide.js';
 import { createStudioProps } from './studio-props.js';
 import { createVicDisplay } from './vic-display.js';
 
@@ -161,6 +162,7 @@ export function createViewer(container, axes, drafting) {
   });
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
   const vicDisplay = createVicDisplay();
+  const originGuide = createOriginGuide();
   let vicMode;
   let hasMesh = false;
   const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
@@ -179,7 +181,7 @@ export function createViewer(container, axes, drafting) {
   const studioBounds = new THREE.Box3();
   let studioFramed = false;
   clay.visible = false;
-  scene.add(clay, printedDepth, printedGhost, vicDisplay.mesh);
+  scene.add(clay, printedDepth, printedGhost, vicDisplay.mesh, originGuide.group);
   const draftingBounds = new THREE.Box3();
   let shouldDraw = false;
   let draftingEnabled = false;
@@ -190,12 +192,16 @@ export function createViewer(container, axes, drafting) {
     shouldDraw = true;
     requestAnimationFrame(() => {
       shouldDraw = false;
+      camera.updateMatrixWorld();
+      const { clientWidth: width, clientHeight: height } = container;
+      const showingVic = vicDisplay.mesh.visible;
+      originGuide.update(camera, width, height, comparing || showingVic ? 1 : clay.scale.x, showingVic && vicMode === 'demo');
       renderer.render(scene, camera);
       drawAxes(axes, camera);
       if (!drafting.hidden && clay.visible) {
         draftingBounds.copy(clay.geometry.boundingBox).applyMatrix4(clay.matrixWorld);
         const printedBounds = comparing ? clay.geometry.boundingBox : undefined;
-        drawDimensions(drafting, camera, draftingBounds, container.clientWidth, container.clientHeight, printedBounds);
+        drawDimensions(drafting, camera, draftingBounds, width, height, printedBounds);
       }
     });
   }
@@ -293,7 +299,7 @@ export function createViewer(container, axes, drafting) {
     event.preventDefault();
   });
 
-  function setMesh(mesh, fit) {
+  function setMesh(mesh, fit, placementOrigin) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
@@ -314,6 +320,7 @@ export function createViewer(container, axes, drafting) {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     vicDisplay.setMesh(geometry, mesh.analysis);
+    originGuide.setMesh(mesh, placementOrigin);
     clay.geometry.dispose();
     clay.geometry = printedGhost.geometry = printedDepth.geometry = geometry;
     hasMesh = true;
@@ -553,5 +560,10 @@ export function createViewer(container, axes, drafting) {
     }
   }
 
-  return { setMesh, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset, frameStudio };
+  function clearPlacement() {
+    originGuide.setMesh();
+    render();
+  }
+
+  return { setMesh, clearPlacement, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset, frameStudio };
 }

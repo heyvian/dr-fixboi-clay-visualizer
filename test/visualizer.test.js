@@ -7,6 +7,7 @@ import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
 import { createVicContacts } from '../src/vic-contact.js';
+import { nearestFootprintPoint } from '../src/origin-guide.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -118,11 +119,20 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
 
   assert.deepEqual(alertsFor(0, 0).alerts, []);
   assert.deepEqual(alertsFor(30, 39).alerts, []);
-  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined });
+  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined, placementOrigin: undefined });
   assert.deepEqual(alertsFor(-36, 48), {
-    alerts: ['Your object appears to be 60 mm off center from X0 Y0.'],
+    alerts: [],
     placementWarning: '60 mm off center from X0 Y0',
+    placementOrigin: [36, 48],
   });
+});
+
+test('the origin guide reaches the actual footprint edge between vertices', () => {
+  const vertices = [-10, 0, 0, 0, 0, -10, 10, 5, 0, 0, 10, 10];
+  const triangles = [0, 2, 1, 0, 2, 3];
+  assert.deepEqual(nearestFootprintPoint(vertices, triangles, 30, 30), [5, 7.5, 5]);
+  assert.deepEqual(nearestFootprintPoint(vertices, triangles, -40, 0), [-10, 0, 0]);
+  assert.equal(nearestFootprintPoint(vertices, triangles, 0, 3), undefined);
 });
 
 test('VIC keeps a short vertical wall standing and demonstrates a failed overhang', () => {

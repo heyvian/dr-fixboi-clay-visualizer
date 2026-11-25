@@ -233,12 +233,10 @@ export function inspectToolpath(model, nozzle) {
   const centerX = (model.low[0] + model.high[0]) / 2;
   const centerY = (model.low[1] + model.high[1]) / 2;
   const centerOffset = Math.hypot(centerX, centerY);
-  let placementWarning;
-  if (centerOffset > 50) {
-    placementWarning = Number(centerOffset.toFixed(2)) + ' mm off center from X0 Y0';
-    alerts.push('Your object appears to be ' + placementWarning + '.');
-  }
+  const placementWarning = centerOffset > 50 ? Number(centerOffset.toFixed(2)) + ' mm off center from X0 Y0' : undefined;
+  // The preview centers the mesh on the toolpath and maps printer Y to world -Z.
+  const placementOrigin = placementWarning ? [-centerX, centerY] : undefined;
   if (model.inferExtrusion) alerts.push('No extrusion commands found. Showing horizontal print moves.');
   if (model.skippedArcs) alerts.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
-  return { alerts, placementWarning };
+  return { alerts, placementWarning, placementOrigin };
 }

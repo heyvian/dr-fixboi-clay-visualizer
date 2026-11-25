@@ -180,7 +180,6 @@ export function createViewer(container, axes, drafting) {
   let studioFloor;
   let studioProps;
   const studioBounds = new THREE.Box3();
-  let studioFramed = false;
   clay.visible = false;
   scene.add(clay, printedDepth, printedGhost, vicDisplay.mesh, originGuide.group);
   const draftingBounds = new THREE.Box3();
@@ -223,7 +222,6 @@ export function createViewer(container, axes, drafting) {
 
   function reset() {
     if (!hasMesh) return;
-    studioFramed = false;
     controls.enablePan = false;
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
@@ -259,32 +257,6 @@ export function createViewer(container, axes, drafting) {
     frame(center, direction, radius, distance);
   }
 
-  function frameStudio() {
-    if (!studioProps?.group.visible || !hasMesh) return;
-    studioFramed = true;
-    controls.enablePan = true;
-    const { center, radius } = studioBounds.getBoundingSphere(new THREE.Sphere());
-    const direction = new THREE.Vector3(0.16, 0.62, 1).normalize();
-    const right = new THREE.Vector3(0, 1, 0).cross(direction).normalize();
-    const up = direction.clone().cross(right);
-    const vertical = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    const horizontal = vertical * camera.aspect;
-    const corner = new THREE.Vector3();
-    let distance = 0;
-    const { min, max } = studioBounds;
-    for (const x of [min.x, max.x]) {
-      for (const y of [min.y, max.y]) {
-        for (const z of [min.z, max.z]) {
-          corner.set(x, y, z).sub(center);
-          const setback = Math.max(Math.abs(corner.dot(right)) / horizontal, Math.abs(corner.dot(up)) / vertical);
-          distance = Math.max(distance, corner.dot(direction) + setback);
-        }
-      }
-    }
-    frame(center, direction, radius, distance * 1.14);
-    controls.minDistance = Math.min(45, controls.minDistance);
-  }
-
   function resize() {
     const { clientWidth: width, clientHeight: height } = container;
     if (!width || !height) return;
@@ -294,8 +266,7 @@ export function createViewer(container, axes, drafting) {
     renderer.setSize(width, height, false);
     drafting.width = Math.round(width * pixelRatio);
     drafting.height = Math.round(height * pixelRatio);
-    if (studioFramed && oldAspect !== camera.aspect) frameStudio();
-    else if ((vicMode === 'demo' || Math.min(oldAspect, camera.aspect) < 1) && Math.abs(oldAspect - camera.aspect) > 0.1) reset();
+    if ((vicMode === 'demo' || Math.min(oldAspect, camera.aspect) < 1) && Math.abs(oldAspect - camera.aspect) > 0.1) reset();
     render();
   }
 
@@ -355,10 +326,7 @@ export function createViewer(container, axes, drafting) {
     grid.position.y = -totalSize * 0.0004;
     shadow.position.y = grid.position.y / 2;
     updateShadow(size);
-    if (fit) {
-      if (studioFramed) frameStudio();
-      else reset();
-    }
+    if (fit) reset();
     render();
     return [size.x, size.z, size.y];
   }
@@ -451,7 +419,6 @@ export function createViewer(container, axes, drafting) {
 
   function focusVic(spot) {
     if (!vicDisplay.mesh.visible) return;
-    studioFramed = false;
     controls.enablePan = true;
     const center = new THREE.Vector3(spot.x, spot.z, -spot.y);
     const { radius, center: middle } = clay.geometry.boundingSphere;
@@ -571,7 +538,6 @@ export function createViewer(container, axes, drafting) {
     if (!active) {
       key.position.set(-4, 7, 4);
       key.target.position.set(0, 0, 0);
-      if (studioFramed) reset();
     }
     const ratio = high ? Math.min(window.devicePixelRatio * 1.65, 2.5) : Math.min(window.devicePixelRatio, 1.25);
     if (ratio !== pixelRatio) {
@@ -588,5 +554,5 @@ export function createViewer(container, axes, drafting) {
     render();
   }
 
-  return { setMesh, clearPlacement, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset, frameStudio };
+  return { setMesh, clearPlacement, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset };
 }

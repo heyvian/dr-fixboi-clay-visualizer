@@ -2,15 +2,13 @@
 
 Preview clay 3D prints from G-code in a ’90s-inspired browser lab. [Open the live visualizer](https://heyvian.github.io/dr-fixboi-clay-visualizer/)
 
-**Made by Vian Esterhuizen.** Vian supplied the concept, feature ideas, and design direction. OpenAI Codex in ChatGPT implemented Vian’s specifications.
-
 ## What the app does
 
 - **Load and inspect G-code.** Start with the built-in sample vase or drop in a file up to 25 MB. Orbit and zoom the model to examine individual beads. The parser handles linear moves, XY arcs, absolute and relative coordinates and extrusion, inch and millimeter units, coordinate resets, and M101/M103-style extrusion. It can infer deposition from horizontal print moves when extrusion commands are absent.
-- **Check print placement.** When the center of the deposited toolpath’s XY bounds is more than 50 mm from `X0 Y0`, a **High Alert** frames the viewport. A 10 mm red ring with an 8 mm gap around the footprint has an arrow and label showing the direction and distance to the origin. If the lowest deposition is above `Z0`, a solid red disk marks the footprint and labels the gap. Travel moves are ignored. Both guide labels lie flat on the bed, and in Render the markings tint the canvas weave. Other checks flag out-of-order layers, deposition below the bed, skipped arcs, and inferred extrusion.
+- **Check print placement.** When the center of the deposited toolpath’s XY bounds is more than 50 mm from `X0 Y0`, a **High Alert** frames the viewport. A 10 mm red ring with an 8 mm gap around the footprint has an arrow and label showing the direction and distance to the origin. If the lowest deposition is above `Z0`, a solid red disk marks the footprint and labels the gap. Travel moves are ignored. The bold red labels lie flat beside the markings, which tint the canvas weave in Render. Other checks flag out-of-order layers, deposition below the bed, skipped arcs, and inferred extrusion.
 - **Adjust deposition.** The default nozzle is 4 mm. The viscosity slider ranges from runny to stiff and changes bead shape and mobility. The gravity switch enables or disables sag and compression. **Fast**, the default, estimates gravity effects from nearby support and unsupported span length. **Accurate** uses finer deposition samples, extrusion amounts where available, contact with earlier beads, lateral spreading, and yield-stress flow along the bead. **VIC** adds experimental failure analysis and a replay.
 - **Measure and compare firing.** **Dimensions** labels length, width, and height in the viewport. Choose a clay body to compare estimated greenware and unglazed cone 6 oxidation finishes. The size table compares printed and fired measurements. **Shrinkage overlay** shows a ghost of the as-printed vessel around the fired model and labels both sets of dimensions.
-- **Render the finish.** **Render** adds textured clay and a canvas work surface with a sponge, double-ended trimming tool, and 30 cm ruler at real-world scale. Use **Studio view** to frame the vessel and props. High render quality adds sampled softbox shadows, accent lights from varied angles, and finer color, roughness, and normal detail. Render quality is independent of simulation quality.
+- **Render the finish.** **Render** adds textured clay and a canvas work surface with a sponge, double-ended trimming tool, and 30 cm ruler at real-world scale. High render quality adds sampled softbox shadows, accent lights from varied angles, and finer color, roughness, and normal detail. Render quality is independent of simulation quality.
 - **Keep files and settings local.** A browser worker reads and simulates G-code on your device. The browser remembers settings locally. The preview requires WebGL 2.
 
 ## VIC · Experimental
@@ -47,3 +45,7 @@ Run `npm test` for the G-code and simulation checks and `npm run build` to gener
 ## GitHub Pages
 
 GitHub Pages serves the built app from the root of the `main` branch. Run `npm run build:pages` after editing the app and commit the updated `index.html` and `pages-assets/` with your source changes. The workflow verifies the tests and checks that the committed site matches the build.
+
+---
+
+<sub>Made by Vian Esterhuizen, who supplied the concept, feature ideas, and design direction. OpenAI Codex in ChatGPT implemented Vian’s specifications.</sub>

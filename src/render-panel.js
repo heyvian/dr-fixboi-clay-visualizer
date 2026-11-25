@@ -7,7 +7,6 @@ export function setupRenderPanel(viewer, settings) {
   const modelStats = document.getElementById('model-stats');
   const renderToggle = document.getElementById('render-toggle');
   const renderQuality = document.getElementById('render-quality');
-  const studioView = document.getElementById('studio-view');
   const overlayToggle = document.getElementById('overlay-toggle');
   const comparisonKey = document.getElementById('comparison-key');
   const viewport = document.getElementById('viewport');
@@ -65,7 +64,6 @@ export function setupRenderPanel(viewer, settings) {
 
     const rendering = Boolean(viewer && settings.rendering);
     renderQuality.hidden = !rendering;
-    studioView.hidden = !rendering;
     viewport.classList.toggle('material-view', rendering);
     viewer?.setScale(fired ? scale : 1);
     viewer?.setAppearance(rendering ? body[stage] : undefined, settings.renderQuality, body.greenware.color);

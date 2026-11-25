@@ -3,7 +3,6 @@ import { formatRaisedHeight } from './gcode.js';
 
 const red = '#ff416d';
 const ink = '#6a1038';
-const cream = '#fffdf7';
 const ringGap = 8;
 const ringWidth = 10;
 const groundHeight = 0.08;
@@ -86,20 +85,22 @@ export function getOriginPlacement(positions, origin) {
 }
 
 function makeLabel(plane, lines) {
-  const width = Math.ceil(Math.max(...lines.map(text => text.length)) * 9.65) + 8;
-  const lineHeight = 19;
-  const height = lines.length * lineHeight + 4;
   const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  const font = '900 20px system-ui, sans-serif';
+  context.font = font;
+  const width = Math.ceil(Math.max(...lines.map(text => context.measureText(text).width))) + 8;
+  const lineHeight = 24;
+  const height = lines.length * lineHeight + 4;
   canvas.width = width * artworkScale;
   canvas.height = height * artworkScale;
-  const context = canvas.getContext('2d');
   context.scale(artworkScale, artworkScale);
-  context.font = '700 16px monospace';
+  context.font = font;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = cream;
+  context.fillStyle = red;
   context.strokeStyle = ink;
-  context.lineWidth = 2.75;
+  context.lineWidth = 2.25;
   context.lineJoin = 'round';
   lines.forEach((text, index) => {
     const y = (index + 0.5) * lineHeight + 2;
@@ -153,36 +154,46 @@ export function createOriginGuide() {
     }
   }
 
-  function layOutLabels(radius, directionX, directionY, directionZ) {
+  function layOutLabels(radius, directionX, directionZ) {
     const yaw = Math.atan2(directionX, directionZ);
     const frontX = Math.sin(yaw);
     const frontZ = Math.cos(yaw);
-    const gap = Math.max(1, radius * 0.04);
-    const slope = directionY / Math.max(0.01, Math.hypot(directionX, directionZ));
+    const gap = Math.max(2, radius * 0.08);
+    const outer = placement ? radius + ringGap + ringWidth : radius;
+
+    function halfSpan(width, depth, x, z) {
+      return (width * Math.abs(x * frontZ - z * frontX) + depth * Math.abs(x * frontX + z * frontZ)) / 2;
+    }
 
     function place({ mesh }, width, depth, x, z) {
       mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
-      mesh.position.set(x, groundHeight + 0.10, z);
+      mesh.position.set(x, groundHeight, z);
       mesh.scale.set(width, depth, 1);
     }
 
     if (originLabel) {
-      const outer = radius + ringGap + ringWidth;
       const width = Math.max(26, radius * 1.53);
       const depth = width / originLabel.aspect * 1.85;
       const [x, z] = placement.direction;
-      const halfSpan = (width * Math.abs(x * frontZ - z * frontX) + depth * Math.abs(x * frontX + z * frontZ)) / 2;
-      const anchor = outer + arrowReach(outer) + gap + halfSpan;
+      const anchor = outer + arrowReach(outer) + gap + halfSpan(width, depth, x, z);
       place(originLabel, width, depth, x * anchor, z * anchor);
     }
     if (raisedLabel) {
       const width = radius * 1.45;
       const depth = radius * 0.90;
-      // A low gap or steep camera angle can hide the disk under the clay. Move the
-      // lettering toward its front edge so it stays readable at either angle.
-      const clearOfClay = radius + depth / 2 + gap - raisedHeight / Math.max(0.04, slope);
-      const anchor = Math.max(radius * 0.35, clearOfClay);
-      place(raisedLabel, width, depth, frontX * anchor, frontZ * anchor);
+      let x = frontX;
+      let z = frontZ;
+      if (placement) {
+        const [arrowX, arrowZ] = placement.direction;
+        // Use the nearer side of the ring when the arrow is pointing at the camera.
+        if (frontX * arrowX + frontZ * arrowZ > 0) {
+          const side = frontZ * arrowX - frontX * arrowZ >= 0 ? 1 : -1;
+          x = -arrowZ * side;
+          z = arrowX * side;
+        }
+      }
+      const anchor = outer + gap + halfSpan(width, depth, x, z);
+      place(raisedLabel, width, depth, x * anchor, z * anchor);
     }
   }
 
@@ -194,7 +205,7 @@ export function createOriginGuide() {
       const angle = index / 24 * 2 * Math.PI;
       return new THREE.Vector3(Math.cos(angle) * outer, groundHeight, Math.sin(angle) * outer);
     });
-    layOutLabels(radius, direction.x, direction.y, direction.z);
+    layOutLabels(radius, direction.x, direction.z);
     for (const label of [originLabel, raisedLabel]) {
       if (!label) continue;
       label.mesh.updateMatrix();
@@ -217,7 +228,7 @@ export function createOriginGuide() {
     const size = 2 * (Math.max(radius, outer ? outer + arrowReach(outer) : 0) + 1);
     previewMark.scale.set(size, size, 1);
     const view = camera.matrixWorld.elements;
-    layOutLabels(radius, view[8], view[9], view[10]);
+    layOutLabels(radius, view[8], view[10]);
   }
 
   return { group, uniforms, setMesh, getFramePoints, update, get hasMark() { return Boolean(placement || raisedHeight); } };

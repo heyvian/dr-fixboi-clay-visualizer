@@ -307,8 +307,6 @@ a:hover { color: #291437; }
 }
 .camera-tools button:hover { background: var(--lavender); color: var(--ink); }
 .camera-tools button:focus-visible { outline-color: var(--green); }
-.camera-tools #studio-view { width: auto; padding-inline: .45rem; font-size: .75rem; }
-.studio-icon { display: none; }
 .axis-key { position: absolute; bottom: .45rem; left: .5rem; width: 4.5rem; height: 3.88rem; pointer-events: none; }
 .scene-hint {
   position: absolute;
@@ -658,6 +656,7 @@ a:hover { color: #291437; }
 .dialog-content p, .dialog-content li { margin: 0 0 .85rem; }
 .dialog-content ul { margin: 0; padding-left: 1.25rem; }
 .dialog-content form { margin-top: 1.25rem; }
+.dialog-content .project-credit { color: #553b69; font-size: .8rem; }
 
 @media (max-width: 60rem) {
   .shell { width: calc(100% - 2.75rem); }
@@ -682,9 +681,6 @@ a:hover { color: #291437; }
   .viewport { min-height: clamp(18rem, 72vw, 30rem); }
   .scene-badges { left: .6rem; top: .65rem; right: 3rem; }
   .camera-tools { right: .55rem; top: .65rem; }
-  .camera-tools #studio-view { width: 2.15rem; padding: 0; font-size: 1.15rem; }
-  .studio-icon { display: block; }
-  .studio-label { display: none; }
   .scene-hint { right: .55rem; bottom: .7rem; }
   .axis-key { left: 0; bottom: .1rem; }
   .viewer-footer { gap: .45rem; }

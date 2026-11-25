@@ -8,6 +8,7 @@ import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
 import { createVicContacts } from '../src/vic-contact.js';
 import { getOriginPlacement } from '../src/origin-guide.js';
+import { depositedIndexCount, nozzlePosition } from '../src/toolpath.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -149,6 +150,23 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
     placementOrigin: [36, 48],
     raisedHeight: 0,
   });
+});
+
+test('toolpath playback leaves clay unchanged during travel and dwell', () => {
+  const model = parseGcode('M83\nG0 Z2 F60\nG1 X10 E1\nG4 P4000\nG1 X20 E1\nG0 Y10\nG1 X30 E1');
+  assert.deepEqual(nozzlePosition(model.motionPoints, 14), [10, 0, 2]);
+  assert.deepEqual(nozzlePosition(model.motionPoints, 31), [20, 5, 2]);
+  for (const quality of ['fast', 'accurate', 'vic']) {
+    const { replay, indices } = makeClayMesh(model, { quality, nozzle: 4, gravity: false });
+    assert.equal(replay.duration, 44, quality);
+    const count = seconds => depositedIndexCount(replay, seconds);
+    assert.equal(count(0), 0, quality);
+    assert.ok(count(10) > 0, quality);
+    assert.equal(count(10), count(14), quality);
+    assert.ok(count(18) > count(14), quality);
+    assert.equal(count(24), count(33), quality);
+    assert.equal(count(44), indices.length, quality);
+  }
 });
 
 test('the origin guide uses the clay radius and true XY bearing and distance', () => {

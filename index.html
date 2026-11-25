@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-rss_kGlI.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-CpvoaDMV.css">
+    <script type="module" crossorigin src="./pages-assets/index-Bsdfa__T.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-uhdCpjEE.css">
   </head>
   <body>
     <div class="top-bar">
@@ -36,11 +36,14 @@
         <section class="window viewer" aria-labelledby="viewer-title">
           <div class="window-bar viewer-bar">
             <h2 id="viewer-title"><span class="window-icon cube-icon" aria-hidden="true"></span> 3D print preview</h2>
-            <label class="switch-control dimension-switch" for="dimension-toggle">
-              <span>Dimensions</span>
-              <input id="dimension-toggle" type="checkbox" role="switch" aria-controls="drafting">
-              <span class="toggle" aria-hidden="true"></span>
-            </label>
+            <div class="viewer-actions">
+              <button class="toolpath-button" type="button" id="toolpath-toggle" aria-expanded="false" aria-controls="toolpath-player" disabled>Toolpath</button>
+              <label class="switch-control dimension-switch" for="dimension-toggle">
+                <span>Dimensions</span>
+                <input id="dimension-toggle" type="checkbox" role="switch" aria-controls="drafting">
+                <span class="toggle" aria-hidden="true"></span>
+              </label>
+            </div>
           </div>
           <div role="status">
             <div id="scene-placement" class="scene-placement" hidden>
@@ -67,7 +70,13 @@
             <div id="vic-loading" class="vic-loading" aria-hidden="true" hidden>
               <span class="vic-spinner"></span><span>Computing VIC…</span>
             </div>
-            <div id="vic-player" class="vic-player" aria-label="VIC demonstration" hidden>
+            <div id="toolpath-player" class="preview-player" role="group" aria-label="Toolpath replay" hidden>
+              <p id="toolpath-time"></p>
+              <button type="button" class="retro-button" id="toolpath-play">Play</button>
+              <input type="range" id="toolpath-progress" min="0" max="1000" value="0" aria-label="Toolpath progress">
+              <button type="button" class="retro-button" id="toolpath-close" aria-label="Close toolpath replay">Close</button>
+            </div>
+            <div id="vic-player" class="preview-player vic-player" aria-label="VIC demonstration" hidden>
               <p id="vic-stage"></p>
               <button type="button" class="retro-button" id="vic-play">Play</button>
               <input type="range" id="vic-progress" min="0" max="1000" value="0" aria-label="Demo progress">
@@ -228,6 +237,7 @@
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
       <div class="dialog-content">
         <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase.</p>
+        <p><strong>Replay the toolpath.</strong> Select Toolpath to watch the clay build in G-code order. The lime marker follows the nozzle, and you can pause or drag the scrubber to inspect any point. The replay is accelerated and the clock shows estimated print time based on G-code feed rates and pauses.</p>
         <p><strong>Check placement.</strong> A red ring and arrow show the distance from X0 Y0 when the print’s center is over 50 mm away. A solid red disk shows the estimated gap beneath a raised print. The app uses the layer height declared in supported G-code settings, preferring the first-layer height. With no declared height, it estimates half the nozzle diameter. The labels lie flat and turn as you orbit. In Render, the lettering and markings tint the canvas weave. Check G-code also flags issues such as out-of-order layers and deposition below Z0.</p>
         <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. Experimental VIC highlights failure hotspots and demonstrates deposition, tearing, and collapse.</p>
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>

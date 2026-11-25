@@ -2,6 +2,7 @@ const wordPattern = /([A-Z])\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))/g;
 const layerSetting = /^\s*;\s*(first_layer_height|initial_layer_print_height|layer_height_0|layer_height)\s*[:=]\s*(\d+(?:\.\d*)?|\.\d+)\s*(%)?\s*(?:;.*)?$/i;
 const tau = 2 * Math.PI;
 const maximumSegments = 300_000;
+const maximumMotionPoints = 600_000;
 
 function mix(start, end, amount) {
   return start + (end - start) * amount;
@@ -62,6 +63,7 @@ export function parseGcode(source) {
   let run;
   let runAmounts;
   let runTimes;
+  let runStarts;
   let lastMode;
   let elapsed = 0;
   let feed = 1500;
@@ -74,6 +76,15 @@ export function parseGcode(source) {
   const inferred = [];
   const explicitTimes = [];
   const inferredTimes = [];
+  const explicitStarts = [];
+  const inferredStarts = [];
+  let motionPoints = [0, 0, 0, 0];
+
+  function trace(time, [x, y, z]) {
+    if (!motionPoints) return;
+    if (motionPoints.length >= 4 * maximumMotionPoints) motionPoints = undefined;
+    else motionPoints.push(time, x, y, z);
+  }
 
   for (const rawLine of source.split(/\r?\n|\r/)) {
     const setting = rawLine.match(layerSetting);
@@ -130,6 +141,7 @@ export function parseGcode(source) {
     if (words.get('F') > 0 && (moves || !suppressMove)) feed = words.get('F') * scale;
     if (words.get('G') === 4) {
       elapsed += Math.max(0, words.get('S') ?? (words.get('P') ?? 0) / 1000);
+      trace(elapsed, position);
       continue;
     }
     if (words.get('G') === 92) {
@@ -170,6 +182,14 @@ export function parseGcode(source) {
     const horizontal = arc || Math.hypot(position[0] - start[0], position[1] - start[1]) > 0.0001;
     const traveling = !arc && length < 0.0001;
     if (traveling) continue;
+    if (arc && motionPoints) {
+      for (let step = 1; step <= arc.steps && motionPoints; step++) {
+        const fraction = step / arc.steps;
+        trace(mix(started, elapsed, fraction), arc.point(fraction));
+      }
+    } else {
+      trace(elapsed, position);
+    }
 
     const isExplicit = depositedFraction > 0 || (motorOn && motion !== 0 && !words.has('E'));
     const canInfer = motion !== 0 && !words.has('E') && horizontal;
@@ -186,7 +206,9 @@ export function parseGcode(source) {
       run = [point(from)];
       mode.push(run);
       runTimes = [mix(started, elapsed, from)];
+      runStarts = [];
       (isExplicit ? explicitTimes : inferredTimes).push(runTimes);
+      (isExplicit ? explicitStarts : inferredStarts).push(runStarts);
       if (isExplicit) {
         runAmounts = [];
         extrusion.push(runAmounts);
@@ -197,6 +219,7 @@ export function parseGcode(source) {
       const fraction = mix(from, 1, step / steps);
       run.push(point(fraction));
       runTimes.push(mix(started, elapsed, fraction));
+      runStarts.push(mix(started, elapsed, mix(from, 1, (step - 1) / steps)));
     }
     if (isExplicit) {
       for (let step = 0; step < steps; step++) runAmounts.push(depositedAmount / steps);
@@ -230,7 +253,10 @@ export function parseGcode(source) {
   const firstLayerHeight = firstLayer?.percent ? layerHeight * firstLayer.height / 100 : firstLayer?.height ?? layerHeight;
   return { paths, low, high, dimensions, inferExtrusion, skippedArcs,
     firstLayerHeight: firstLayerHeight > 0 && Number.isFinite(firstLayerHeight) ? firstLayerHeight : undefined,
-    extrusion: inferExtrusion ? undefined : extrusion, times: inferExtrusion ? inferredTimes : explicitTimes };
+    extrusion: inferExtrusion ? undefined : extrusion,
+    times: inferExtrusion ? inferredTimes : explicitTimes,
+    moveStarts: inferExtrusion ? inferredStarts : explicitStarts,
+    motionPoints: motionPoints && Float64Array.from(motionPoints) };
 }
 
 export function estimateBedGap(model, nozzle) {

@@ -5,6 +5,7 @@ import { createClayMaterial } from './clay-material.js';
 import { createCanvasMaterial } from './canvas-material.js';
 import { drawDimensions } from './dimensions.js';
 import { createOriginGuide } from './origin-guide.js';
+import { depositedIndexCount, nozzlePosition } from './toolpath.js';
 import { createStudioProps } from './studio-props.js';
 import { createVicDisplay } from './vic-display.js';
 
@@ -161,11 +162,18 @@ export function createViewer(container, axes, drafting) {
     side: THREE.DoubleSide,
   });
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
+  const nozzleMarker = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.08, 1, 12),
+    new THREE.MeshBasicMaterial({ color: '#dbff83', toneMapped: false }));
+  nozzleMarker.visible = false;
+  clay.add(nozzleMarker);
   const vicDisplay = createVicDisplay();
   const originGuide = createOriginGuide();
   let vicMode;
   let hasMesh = false;
   let raisedHeight = 0;
+  let toolpathReplay;
+  let toolpathMotion;
+  let toolpathActive = false;
   const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
     transparent: true, colorWrite: false,
   }));
@@ -289,7 +297,7 @@ export function createViewer(container, axes, drafting) {
     event.preventDefault();
   });
 
-  function setMesh(mesh, fit, placementOrigin, estimatedGap = 0) {
+  function setMesh(mesh, fit, placementOrigin, estimatedGap = 0, motion) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
@@ -298,6 +306,12 @@ export function createViewer(container, axes, drafting) {
     geometry.computeBoundingSphere();
 
     const size = geometry.boundingBox.getSize(new THREE.Vector3());
+    toolpathReplay = mesh.replay;
+    if (fit) toolpathMotion = motion;
+    toolpathActive = false;
+    nozzleMarker.visible = false;
+    const markerHeight = Math.max(toolpathReplay?.diameter * 1.5 || 0, Math.max(size.x, size.y, size.z) * 0.048);
+    nozzleMarker.scale.set(markerHeight * 0.64, markerHeight, markerHeight * 0.64);
     const { min } = geometry.boundingBox;
     const colors = new Float32Array(mesh.positions.length);
     const base = new THREE.Color(sceneColors.softClay);
@@ -383,7 +397,7 @@ export function createViewer(container, axes, drafting) {
 
   function updateDraftingView() {
     const vicVisible = vicDisplay.mesh.visible;
-    drafting.hidden = vicVisible || !(draftingEnabled || comparing);
+    drafting.hidden = vicVisible || toolpathActive || !(draftingEnabled || comparing);
     camera.zoom = vicVisible ? 1 : comparing ? 0.72 : (draftingEnabled ? 0.85 : 1);
     camera.updateProjectionMatrix();
     render();
@@ -404,7 +418,30 @@ export function createViewer(container, axes, drafting) {
 
   function updateMeshVisibility() {
     clay.visible = hasMesh && !vicDisplay.mesh.visible;
-    printedDepth.visible = printedGhost.visible = comparing && clay.visible;
+    printedDepth.visible = printedGhost.visible = comparing && clay.visible && !toolpathActive;
+  }
+
+  function setToolpathTime(seconds) {
+    if (!toolpathReplay) return;
+    const active = seconds !== undefined;
+    if (toolpathActive !== active) {
+      toolpathActive = active;
+      updateMeshVisibility();
+      updateDraftingView();
+    }
+    const count = active ? depositedIndexCount(toolpathReplay, seconds) : Infinity;
+    if (clay.geometry.drawRange.count !== count) {
+      clay.geometry.setDrawRange(0, count);
+      renderer.shadowMap.needsUpdate = true;
+    }
+    shadow.visible = !renderer.shadowMap.enabled && count > 0;
+    nozzleMarker.visible = active && Boolean(toolpathMotion) && seconds < toolpathReplay.duration;
+    if (nozzleMarker.visible) {
+      const { start, origin, nozzleLift } = toolpathReplay;
+      const [x, y, z] = nozzlePosition(toolpathMotion, start + seconds);
+      nozzleMarker.position.set(x - origin[0], Math.max(0, z - origin[2] + nozzleLift) + nozzleMarker.scale.y / 2, origin[1] - y);
+    }
+    render();
   }
 
   function setVicView(mode, progress = 0) {
@@ -531,7 +568,7 @@ export function createViewer(container, axes, drafting) {
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
     fill.intensity = active ? 0.33 : 0.52;
     grid.visible = !active;
-    shadow.visible = !active;
+    shadow.visible = !active && clay.geometry.drawRange.count > 0;
     if (studioFloor) studioFloor.visible = studioProps.group.visible = active;
     renderer.shadowMap.enabled = active;
     key.castShadow = active;
@@ -556,5 +593,5 @@ export function createViewer(container, axes, drafting) {
     render();
   }
 
-  return { setMesh, clearPlacement, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset };
+  return { setMesh, clearPlacement, setAppearance, setScale, setDrafting, setComparison, setToolpathTime, setVicView, focusVic, zoom, reset };
 }

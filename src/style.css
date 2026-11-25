@@ -143,7 +143,15 @@ a:hover { color: #291437; }
   letter-spacing: .075em;
 }
 .viewer { display: flex; flex-direction: column; }
-.viewer-bar { background: var(--lavender); }
+.viewer-bar { background: var(--lavender); flex-wrap: wrap; row-gap: .45rem; }
+.viewer-actions { display: flex; align-items: center; gap: .75rem; margin-left: auto; }
+.toolpath-button {
+  padding: .22rem .47rem;
+  border: 1px solid var(--ink);
+  background: var(--cream);
+  font: 700 .75rem var(--mono);
+}
+.toolpath-button:hover, .toolpath-button[aria-expanded='true'] { background: var(--green); }
 .settings-bar { background: var(--green); }
 .window-icon {
   display: grid;
@@ -576,13 +584,13 @@ a:hover { color: #291437; }
 .vic-hotspots button { padding: 0; border: 0; background: none; color: var(--purple); text-align: left; text-decoration: underline; }
 .vic-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .6rem; }
 .vic-actions [aria-pressed='true'], .vic-actions [aria-expanded='true'] { background: var(--green); }
-.vic-player { position: absolute; bottom: .85rem; left: .75rem; right: .75rem; max-width: 27rem; margin-inline: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .4rem .65rem; padding: .55rem; background: #ede2f8; color: var(--ink); border: 1px solid #b99bc9; }
-.vic-player p { grid-column: 1 / -1; margin: 0; font: 700 .75rem var(--mono); }
-.vic-player button { padding: .3rem .52rem; }
-.vic-player input { width: 100%; accent-color: var(--purple); }
-.viewport:has(.vic-player:not([hidden])) :is(.scene-hint, .axis-key) { display: none; }
+.preview-player { position: absolute; bottom: .85rem; left: .75rem; right: .75rem; max-width: 27rem; margin-inline: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .4rem .65rem; padding: .55rem; background: #ede2f8; color: var(--ink); border: 1px solid #b99bc9; }
+.preview-player p { grid-column: 1 / -1; margin: 0; font: 700 .75rem var(--mono); }
+.preview-player button { padding: .3rem .52rem; }
+.preview-player input { width: 100%; accent-color: var(--purple); }
+.viewport:has(.preview-player:not([hidden])) :is(.scene-hint, .axis-key) { display: none; }
 .vic-sample { margin-top: .7rem; padding: 0; color: var(--ink); border: 0; background: none; text-decoration: underline; font: inherit; font-size: .82rem; }
-.vic-view #comparison-key { display: none !important; }
+:is(.vic-view, .toolpath-view) #comparison-key { display: none !important; }
 .quality-choices input:focus-visible + span { position: relative; z-index: 1; outline: 3px solid var(--purple); outline-offset: 2px; }
 
 .render-window { margin-top: 1.3rem; }

@@ -13,9 +13,10 @@ function distance(a, b) {
   return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
 }
 
-function samplePath(path, origin, maxStep, minStep) {
+function samplePath(path, origin, maxStep, minStep, times, moveStarts) {
   const first = path[0].map((value, axis) => value - origin[axis]);
   const samples = [first];
+  const sampledTimes = [times[0]];
   let previous = first;
   for (let i = 1; i < path.length; i++) {
     const point = path[i].map((value, axis) => value - origin[axis]);
@@ -23,12 +24,15 @@ function samplePath(path, origin, maxStep, minStep) {
     if (length < minStep && i < path.length - 1) continue;
     if (length < 0.00001) continue;
     const steps = Math.ceil(length / maxStep);
+    const startTime = moveStarts?.[i - 1] ?? times[i - 1];
     for (let step = 1; step <= steps; step++) {
-      samples.push(point.map((value, axis) => previous[axis] + (value - previous[axis]) * step / steps));
+      const fraction = step / steps;
+      samples.push(point.map((value, axis) => previous[axis] + (value - previous[axis]) * fraction));
+      sampledTimes.push(startTime + (times[i] - startTime) * fraction);
     }
     previous = point;
   }
-  return samples;
+  return { points: samples, times: sampledTimes };
 }
 
 function turnsAt(previous, point, next, incomingLength) {
@@ -38,10 +42,10 @@ function turnsAt(previous, point, next, incomingLength) {
   return dot < 0.992 * incomingLength * outgoingLength;
 }
 
-function sampleDeposition(path, amounts, origin, spacing, typicalRate, times) {
+function sampleDeposition(path, amounts, origin, spacing, typicalRate, times, moveStarts) {
   const points = [path[0].map((value, axis) => value - origin[axis])];
   const edgeAreas = [];
-  const sampledTimes = times ? [times[0]] : undefined;
+  const sampledTimes = [times[0]];
   let covered = 0;
   let volume = 0;
   for (let i = 1; i < path.length; i++) {
@@ -59,7 +63,8 @@ function sampleDeposition(path, amounts, origin, spacing, typicalRate, times) {
       traveled += step;
       volume += step * area;
       points.push(previous.map((value, axis) => value - origin[axis] + (point[axis] - value) * traveled / length));
-      if (times) sampledTimes.push(times[i - 1] + (times[i] - times[i - 1]) * traveled / length);
+      const startTime = moveStarts?.[i - 1] ?? times[i - 1];
+      sampledTimes.push(startTime + (times[i] - startTime) * traveled / length);
       edgeAreas.push(volume / spacing);
       covered = 0;
       volume = 0;
@@ -69,7 +74,7 @@ function sampleDeposition(path, amounts, origin, spacing, typicalRate, times) {
     const end = i === path.length - 1;
     if (covered > 1e-7 && (end || (covered > spacing * 0.18 && turnsAt(previous, point, path[i + 1], length)))) {
       points.push(point.map((value, axis) => value - origin[axis]));
-      if (times) sampledTimes.push(times[i]);
+      sampledTimes.push(times[i]);
       edgeAreas.push(volume / covered);
       covered = 0;
       volume = 0;
@@ -84,8 +89,10 @@ function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typical
   let segments = 0;
   let caps = 0;
   for (const [index, path] of model.paths.entries()) {
-    const run = accurate ? sampleDeposition(path, model.extrusion?.[index], origin, spacing, typicalRate, vic ? model.times?.[index] : undefined)
-      : { points: samplePath(path, origin, spacing, minStep) };
+    const times = model.times[index];
+    const starts = model.moveStarts?.[index];
+    const run = accurate ? sampleDeposition(path, model.extrusion?.[index], origin, spacing, typicalRate, times, starts)
+      : samplePath(path, origin, spacing, minStep, times, starts);
     const samples = run.points;
     if (samples.length < 2) continue;
     const start = samples[0];
@@ -96,10 +103,10 @@ function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typical
     // A near-closed perimeter gets one shared ring in place of two overlapping caps.
     if (closed) {
       samples.pop();
-      run.times?.pop();
+      run.times.pop();
     }
     else caps += 2;
-    paths.push({ ...run, closed });
+    paths.push({ ...run, closed, endTime: times.at(-1) });
     rings += samples.length;
     segments += closed ? samples.length : samples.length - 1;
     if (rings > (vic ? maximumVicRings : maximumRings)) return undefined;
@@ -265,6 +272,8 @@ export function makeClayMesh(model, options) {
   const sides = Math.min(vic ? 24 : accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
   const positions = new Float32Array((rings * sides + caps) * 3);
   const indices = new Uint32Array((segments * 2 + caps) * sides * 3);
+  const replayTimes = new Float64Array(segments + caps);
+  const indexEnds = new Uint32Array(segments + caps);
   const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
   const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
   const cuts = [];
@@ -276,10 +285,30 @@ export function makeClayMesh(model, options) {
   });
   let vertex = 0;
   let face = 0;
+  let replayStep = 0;
   const beadRadius = diameter * (0.51 + 0.16 * softness);
   const beadHeight = diameter * (0.44 - 0.08 * softness);
 
-  for (const { points: path, edgeAreas, closed } of paths) {
+  function record(time) {
+    replayTimes[replayStep] = time;
+    indexEnds[replayStep++] = face;
+  }
+
+  function addCap(point, ring, reverse, node, area, time) {
+    const scale = point[4] ?? Math.sqrt(area ?? 1);
+    positions.set([point[0], point[2] + beadHeight * scale / (point[5] ?? 1), -point[1]], vertex * 3);
+    if (nodeIds) nodeIds[vertex] = node;
+    for (let j = 0; j < sides; j++) {
+      const a = ring + j;
+      const b = ring + (j + 1) % sides;
+      indices.set(reverse ? [vertex, b, a] : [vertex, a, b], face);
+      face += 3;
+    }
+    vertex++;
+    record(time);
+  }
+
+  for (const { points: path, edgeAreas, closed, times, endTime } of paths) {
     const firstNode = nodeIndex;
     const startRing = vertex;
     let sideX = 1;
@@ -318,6 +347,9 @@ export function makeClayMesh(model, options) {
       }
       nodeIndex++;
     }
+    // Keep triangles in print order, including the caps, for range-based playback.
+    const endRing = vertex - sides;
+    if (!closed) addCap(path[0], startRing, true, firstNode, edgeAreas?.[0], times[1]);
     const joins = closed ? path.length : path.length - 1;
     for (let i = 0; i < joins; i++) {
       const ring = startRing + i * sides;
@@ -335,23 +367,12 @@ export function makeClayMesh(model, options) {
         indices.set([ring + j, ring + next, following + j, ring + next, following + next, following + j], face);
         face += 6;
       }
+      record(times[i + 1] ?? endTime);
     }
-    if (closed) continue;
-    const endRing = vertex - sides;
-    for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
-      const scale = point[4] ?? Math.sqrt((reverse ? edgeAreas?.[0] : edgeAreas?.at(-1)) ?? 1);
-      positions.set([point[0], point[2] + beadHeight * scale / (point[5] ?? 1), -point[1]], vertex * 3);
-      if (nodeIds) nodeIds[vertex] = reverse ? firstNode : nodeIndex - 1;
-      for (let j = 0; j < sides; j++) {
-        const a = ring + j;
-        const b = ring + (j + 1) % sides;
-        indices.set(reverse ? [vertex, b, a] : [vertex, a, b], face);
-        face += 3;
-      }
-      vertex++;
-    }
+    if (!closed) addCap(path.at(-1), endRing, false, nodeIndex - 1, edgeAreas?.at(-1), endTime);
   }
 
+  let lift = 0;
   if (analysis) {
     analysis.nodeIds = nodeIds;
     analysis.cuts = new Uint32Array(cuts);
@@ -362,10 +383,15 @@ export function makeClayMesh(model, options) {
     // bead roundness can move that underside relative to the lowest path point.
     let bottom = Infinity;
     for (let i = 1; i < positions.length; i += 3) bottom = Math.min(bottom, positions[i]);
-    const lift = bedGap - bottom;
+    lift = bedGap - bottom;
     if (lift) {
       for (let i = 1; i < positions.length; i += 3) positions[i] += lift;
     }
   }
-  return { positions, indices, analysis };
+  const start = paths[0]?.times[0];
+  const end = paths.at(-1)?.endTime;
+  const replay = Number.isFinite(end) && end > start
+    ? { start, duration: end - start, times: replayTimes, indexEnds, origin, nozzleLift: lift + 2 * beadHeight, diameter }
+    : undefined;
+  return { positions, indices, analysis, replay };
 }

@@ -9,6 +9,7 @@ import { makeOverhangSample, makeSample } from './sample.js';
 import { createViewer } from './scene.js';
 import { setupRenderPanel } from './render-panel.js';
 import { loadSettings, saveSettings } from './settings.js';
+import { setupToolpathPanel } from './toolpath-panel.js';
 import { setupVicPanel } from './vic-panel.js';
 
 const byId = id => document.getElementById(id);
@@ -111,7 +112,8 @@ const renderPanel = setupRenderPanel(viewer, settings);
 byId('quality-note').hidden = settings.quality === 'vic';
 
 if (viewer) {
-  const vicPanel = setupVicPanel(viewer);
+  const vicPanel = setupVicPanel(viewer, () => toolpathPanel.close());
+  const toolpathPanel = setupToolpathPanel(viewer, () => vicPanel.close());
   const worker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
   const sizeLimit = 25 * 1024 * 1024;
   let currentName;
@@ -131,6 +133,7 @@ if (viewer) {
 
   function updateSceneStatus() {
     const working = busy || loadingFile || upcoming || (pendingSettings && currentName);
+    toolpathPanel.setBusy(Boolean(working));
     const computingVic = working && settings.quality === 'vic';
     vicLoading.hidden = !computingVic;
     sceneStatus.textContent = working ? (computingVic ? 'Computing VIC…' : 'Building preview…')
@@ -214,7 +217,8 @@ if (viewer) {
         byId('file-name').title = currentName;
         restoreSample.hidden = currentIsSample;
       }
-      const { dimensions, raisedHeight } = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight);
+      const { dimensions, raisedHeight } = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight, data.motion);
+      toolpathPanel.setDuration(data.mesh.replay?.duration);
       showChecks(data.alerts, data.placementWarning, raisedHeight);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');

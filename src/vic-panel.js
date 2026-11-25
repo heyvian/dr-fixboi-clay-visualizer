@@ -1,6 +1,6 @@
 import { vicCauses } from './vic.js';
 
-export function setupVicPanel(viewer) {
+export function setupVicPanel(viewer, onOpen) {
   const byId = id => document.getElementById(id);
   const panel = byId('vic-panel');
   const status = byId('vic-status');
@@ -55,6 +55,7 @@ export function setupVicPanel(viewer) {
   }
 
   function show(view) {
+    if (view) onOpen();
     pause();
     mode = view;
     map.setAttribute('aria-pressed', String(view === 'map'));
@@ -128,5 +129,5 @@ export function setupVicPanel(viewer) {
   });
   play.addEventListener('click', () => { if (animation) pause(); else resume(); });
 
-  return { begin, finish, error() { status.textContent = 'VIC could not analyze this toolpath.'; } };
+  return { begin, finish, close() { if (mode) show(undefined); }, error() { status.textContent = 'VIC could not analyze this toolpath.'; } };
 }

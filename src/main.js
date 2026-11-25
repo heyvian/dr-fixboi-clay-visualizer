@@ -21,6 +21,7 @@ const restoreSample = byId('restore-sample');
 const status = byId('upload-status');
 const sceneStatus = byId('scene-status');
 const scenePlacement = byId('scene-placement');
+const scenePlacementDetail = byId('scene-placement-detail');
 const vicLoading = byId('vic-loading');
 const sceneError = byId('scene-error');
 const cameraButtons = ['zoom-in', 'zoom-out', 'reset-view', 'studio-view'].map(byId);
@@ -176,7 +177,7 @@ if (viewer) {
 
   function showChecks(alerts, placementWarning) {
     scenePlacement.hidden = !placementWarning;
-    scenePlacement.textContent = placementWarning ?? '';
+    scenePlacementDetail.textContent = placementWarning ?? '';
     if (shownAlerts.length === alerts.length && shownAlerts.every((message, index) => message === alerts[index])) return;
     shownAlerts = alerts;
     byId('code-alert-content').hidden = !alerts.length;

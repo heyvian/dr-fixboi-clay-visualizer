@@ -236,8 +236,21 @@ export function createViewer(container, axes, drafting) {
       center.y -= radius * 0.22;
       radius *= 1.06;
     }
-    const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
-    frame(center, new THREE.Vector3(0.52, 0.4, 1).normalize(), radius, distance);
+    let distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
+    const direction = new THREE.Vector3(0.52, 0.4, 1).normalize();
+    const guidePoints = vicMode === 'demo' ? [] : originGuide.getFramePoints(scale);
+    if (guidePoints.length) {
+      const right = new THREE.Vector3(0, 1, 0).cross(direction).normalize();
+      const up = direction.clone().cross(right);
+      const width = Math.tan(horizontal) * 0.86;
+      const height = Math.tan(vertical) * 0.76;
+      for (const point of guidePoints) {
+        point.sub(center);
+        const setback = Math.max(Math.abs(point.dot(right)) / width, Math.abs(point.dot(up)) / height);
+        distance = Math.max(distance, point.dot(direction) + setback);
+      }
+    }
+    frame(center, direction, radius, distance);
   }
 
   function frameStudio() {

@@ -7,7 +7,7 @@ import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
 import { createVicContacts } from '../src/vic-contact.js';
-import { nearestFootprintPoint } from '../src/origin-guide.js';
+import { getOriginPlacement } from '../src/origin-guide.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -127,12 +127,12 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
   });
 });
 
-test('the origin guide reaches the actual footprint edge between vertices', () => {
-  const vertices = [-10, 0, 0, 0, 0, -10, 10, 5, 0, 0, 10, 10];
-  const triangles = [0, 2, 1, 0, 2, 3];
-  assert.deepEqual(nearestFootprintPoint(vertices, triangles, 30, 30), [5, 7.5, 5]);
-  assert.deepEqual(nearestFootprintPoint(vertices, triangles, -40, 0), [-10, 0, 0]);
-  assert.equal(nearestFootprintPoint(vertices, triangles, 0, 3), undefined);
+test('the origin guide uses the clay radius and true XY bearing and distance', () => {
+  const vertices = [-10, 0, 0, 0, 26, -10, 12, 5, 9, 0, 10, 10];
+  assert.deepEqual(getOriginPlacement(vertices, [600, -800]), {
+    radius: 15, direction: [0.6, -0.8], distance: 1000,
+  });
+  assert.equal(getOriginPlacement(vertices), undefined);
 });
 
 test('VIC keeps a short vertical wall standing and demonstrates a failed overhang', () => {

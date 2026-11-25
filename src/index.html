@@ -227,7 +227,7 @@
     <dialog id="help-dialog" class="window info-dialog" aria-labelledby="help-title">
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
       <div class="dialog-content">
-        <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Check G-code flags issues such as a first bead that starts too high. A high alert flags off-center prints. Zoom out to bring X0 Y0 and the distance to the nearest edge into view.</p>
+        <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Check G-code flags issues such as a first bead that starts too high. For off-center prints, the red ring and arrow show the direction and distance from the print’s center to X0 Y0.</p>
         <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. Experimental VIC highlights failure hotspots and demonstrates deposition, tearing, and collapse.</p>
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
@@ -240,11 +240,15 @@
     <dialog id="credits-dialog" class="window info-dialog" aria-labelledby="credits-title">
       <div class="window-bar settings-bar"><h2 id="credits-title">Credits</h2></div>
       <div class="dialog-content">
+        <p><strong>Made by Vian Esterhuizen.</strong> Vian supplied the concept, feature ideas, and design direction. OpenAI Codex in ChatGPT implemented Vian’s specifications.</p>
+        <h3>Libraries and type</h3>
         <ul>
-          <li><a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> powers the WebGL preview, orbit controls, studio lighting, and materials. MIT license.</li>
-          <li><a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> builds the site and bundles the simulation worker. MIT license.</li>
-          <li><a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> packages Archivo Black by Omnibus-Type, DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. The fonts use the SIL Open Font License 1.1.</li>
+          <li>Three.js and its add-ons power the WebGL preview, orbit controls, and studio rendering. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
+          <li>Vite builds the site and bundles the simulation worker. <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> · <a href="https://github.com/vitejs/vite/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">MIT license</a></li>
+          <li>Fontsource packages Archivo Black by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. <a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> · SIL Open Font License 1.1 for <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/archivo-black.txt">Archivo Black</a>, <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/dm-sans.txt">DM Sans</a>, and <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/ibm-plex-mono.txt">IBM Plex Mono</a></li>
         </ul>
+        <h3>Clay and simulation references</h3>
+        <p>Clay presets use published shrinkage data. The project README links to the clay rheology and printability research behind VIC. <a href="https://psh.ca/products/20kg-psh-dark-granite-clay-cone-6" target="_blank" rel="noopener noreferrer">Pottery Supply House</a> · <a href="https://www.plainsmanclays.com/" target="_blank" rel="noopener noreferrer">Plainsman Clays</a> · <a href="https://github.com/heyvian/dr-fixboi-clay-visualizer#vic--experimental" target="_blank" rel="noopener noreferrer">VIC research references</a></p>
         <form method="dialog"><button type="submit" class="retro-button">Close</button></form>
       </div>
     </dialog>

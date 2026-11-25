@@ -1,223 +1,170 @@
 import * as THREE from 'three';
-import { Line2 } from 'three/addons/lines/Line2.js';
-import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
-import { formatLength } from './dimensions.js';
 
 const red = '#ff416d';
 const ink = '#6a1038';
 const cream = '#fffdf7';
+const ringGap = 8;
+const ringWidth = 10;
+const groundHeight = 0.08;
+const artworkScale = 2;
 
-function cross(ax, az, bx, bz) {
-  return ax * bz - az * bx;
+export function getOriginPlacement(positions, origin) {
+  if (!origin?.every(Number.isFinite)) return;
+  const distance = Math.hypot(...origin);
+  if (!distance || !Number.isFinite(distance)) return;
+  let radiusSquared = 0;
+  // The print is centered on the XY bounds of its toolpath in the viewer.
+  for (let index = 0; index < positions.length; index += 3) {
+    const x = positions[index];
+    const z = positions[index + 2];
+    radiusSquared = Math.max(radiusSquared, x * x + z * z);
+  }
+  return {
+    radius: Math.sqrt(radiusSquared),
+    direction: origin.map(axis => axis / distance),
+    distance,
+  };
 }
 
-// Every mesh triangle projects onto the print bed. The closest point of their union
-// is on a projected edge unless the origin itself lies within the footprint.
-export function nearestFootprintPoint(positions, indices, x, z) {
-  let edgeX = positions[0];
-  let edgeY = positions[1];
-  let edgeZ = positions[2];
-  let distanceSquared = (x - edgeX) ** 2 + (z - edgeZ) ** 2;
-  let limit = Math.sqrt(distanceSquared);
-
-  function considerEdge(a, b, ax, az, bx, bz) {
-    const dx = bx - ax;
-    const dz = bz - az;
-    const lengthSquared = dx * dx + dz * dz;
-    const t = lengthSquared ? Math.min(1, Math.max(0, ((x - ax) * dx + (z - az) * dz) / lengthSquared)) : 0;
-    const nextX = ax + dx * t;
-    const nextZ = az + dz * t;
-    const squared = (x - nextX) ** 2 + (z - nextZ) ** 2;
-    if (squared > distanceSquared) return;
-    const nextY = positions[a + 1] + (positions[b + 1] - positions[a + 1]) * t;
-    if (squared === distanceSquared && nextY >= edgeY) return;
-    edgeX = nextX;
-    edgeY = nextY;
-    edgeZ = nextZ;
-    distanceSquared = squared;
-    limit = Math.sqrt(squared);
-  }
-
-  for (let i = 0; i < indices.length; i += 3) {
-    const a = indices[i] * 3;
-    const b = indices[i + 1] * 3;
-    const c = indices[i + 2] * 3;
-    const ax = positions[a], az = positions[a + 2];
-    const bx = positions[b], bz = positions[b + 2];
-    const cx = positions[c], cz = positions[c + 2];
-    if (Math.min(ax, bx, cx) - x > limit || x - Math.max(ax, bx, cx) > limit
-      || Math.min(az, bz, cz) - z > limit || z - Math.max(az, bz, cz) > limit) continue;
-
-    if (cross(bx - ax, bz - az, cx - ax, cz - az) !== 0) {
-      const ab = cross(bx - ax, bz - az, x - ax, z - az);
-      const bc = cross(cx - bx, cz - bz, x - bx, z - bz);
-      const ca = cross(ax - cx, az - cz, x - cx, z - cz);
-      if ((ab >= 0 && bc >= 0 && ca >= 0) || (ab <= 0 && bc <= 0 && ca <= 0)) return;
-    }
-    considerEdge(a, b, ax, az, bx, bz);
-    considerEdge(b, c, bx, bz, cx, cz);
-    considerEdge(c, a, cx, cz, ax, az);
-  }
-  if (limit > 0.01) return [edgeX, edgeY, edgeZ];
-}
-
-function makeSprite() {
+function makeSprite(width, height) {
   const canvas = document.createElement('canvas');
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  canvas.width = width * artworkScale;
+  canvas.height = height * artworkScale;
+  const context = canvas.getContext('2d');
+  context.scale(artworkScale, artworkScale);
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: texture, sizeAttenuation: false, depthWrite: false, toneMapped: false, fog: false,
+    map, sizeAttenuation: false, depthTest: false, depthWrite: false, toneMapped: false, fog: false,
   }));
-  return { sprite, canvas, texture, width: 0, height: 0 };
+  sprite.renderOrder = 5;
+  return { sprite, context, width, height };
 }
 
-function paint(art, width, height) {
-  art.width = width;
-  art.height = height;
-  art.canvas.width = width * 2;
-  art.canvas.height = height * 2;
-  const context = art.canvas.getContext('2d');
-  context.scale(2, 2);
-  art.texture.needsUpdate = true;
-  return context;
+function makeArrow() {
+  const arrow = makeSprite(56, 24);
+  const { sprite, context } = arrow;
+  sprite.center.set(0, 0.5);
+  context.fillStyle = red;
+  context.strokeStyle = cream;
+  context.lineWidth = 2;
+  context.lineJoin = 'round';
+  context.beginPath();
+  for (const [x, y] of [[1, 8], [35, 8], [35, 2], [54, 12], [35, 22], [35, 16], [1, 16]]) context.lineTo(x, y);
+  context.closePath();
+  context.stroke();
+  context.fill();
+  return sprite;
 }
 
 const labelFont = '700 12px monospace';
 
-function paintLabel(art, text) {
-  const context = art.canvas.getContext('2d');
-  context.font = labelFont;
-  const width = Math.ceil(context.measureText(text).width) + 14;
-  paint(art, width, 22);
+function makeLabel(text) {
+  const label = makeSprite(Math.ceil(text.length * 7.25) + 14, 22);
+  const { context, width, height } = label;
   context.fillStyle = red;
-  context.fillRect(0, 0, width, 22);
+  context.fillRect(0, 0, width, height);
   context.fillStyle = ink;
-  context.fillRect(1, 1, width - 2, 20);
+  context.fillRect(1, 1, width - 2, height - 2);
   context.font = labelFont;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = cream;
-  context.fillText(text, width / 2, 11.5);
+  context.fillText(text, width / 2, height / 2 + 0.5);
+  label.sprite.renderOrder = 6;
+  return label;
 }
 
-function makeLine(width, opacity) {
-  const geometry = new LineGeometry().setPositions([0, 0, 0, 1, 0, 0]);
-  const line = new Line2(geometry, new LineMaterial({
-    color: red, linewidth: width, opacity, transparent: opacity < 1, depthWrite: false, toneMapped: false, fog: false,
-  }));
-  line.renderOrder = 4;
-  return line;
-}
-
-function setSegment({ geometry }, start, end) {
-  const buffer = geometry.getAttribute('instanceStart').data;
-  buffer.array.set([start.x, start.y, start.z, end.x, end.y, end.z]);
-  buffer.needsUpdate = true;
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
+function arrowReach(radius) {
+  return Math.max(14, radius * 0.37);
 }
 
 export function createOriginGuide() {
   const group = new THREE.Group();
-  const line = makeLine(3.5, 1);
-  const extension = makeLine(1.5, 0.7);
-  const dot = makeSprite();
-  const originLabel = makeSprite();
-  const distanceLabel = makeSprite();
-  const circle = paint(dot, 16, 16);
-  circle.fillStyle = cream;
-  circle.beginPath();
-  circle.arc(8, 8, 7, 0, 2 * Math.PI);
-  circle.fill();
-  circle.fillStyle = red;
-  circle.beginPath();
-  circle.arc(8, 8, 5.25, 0, 2 * Math.PI);
-  circle.fill();
-  paintLabel(originLabel, 'X0 Y0');
-  group.add(line, extension, dot.sprite, originLabel.sprite, distanceLabel.sprite);
+  const ring = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+    color: red, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false, fog: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
+  }));
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = groundHeight;
+  ring.renderOrder = 4;
+  const arrow = makeArrow();
+  group.add(ring, arrow);
   group.visible = false;
-
-  // Keep the guide just above the ground plane, in the same frame as the clay.
-  const start = new THREE.Vector3(0, 0.02, 0);
-  const end = start.clone();
-  const surface = start.clone();
-  const middle = start.clone();
-  const projected = new THREE.Vector3();
-  const edges = new Map();
-  let footprint;
+  const start = new THREE.Vector3();
+  const tip = new THREE.Vector3();
+  let placement;
+  let label;
   let drawnScale;
-  let drawnLabel;
 
   function setMesh(mesh, origin) {
-    footprint = mesh && origin?.every(Number.isFinite) ? mesh : undefined;
-    if (footprint) start.set(origin[0], start.y, origin[1]);
-    edges.clear();
+    placement = mesh && getOriginPlacement(mesh.positions, origin);
     drawnScale = undefined;
+    if (label) {
+      label.sprite.removeFromParent();
+      label.sprite.material.map.dispose();
+      label.sprite.material.dispose();
+      label = undefined;
+    }
+    if (placement) {
+      const distance = Number(placement.distance.toFixed(2));
+      label = makeLabel(distance + ' mm to X0 Y0');
+      group.add(label.sprite);
+    }
+  }
+
+  function getFramePoints(scale) {
+    if (!placement) return [];
+    const outer = placement.radius * scale + ringGap + ringWidth;
+    const points = Array.from({ length: 24 }, (_, index) => {
+      const angle = index / 24 * 2 * Math.PI;
+      return new THREE.Vector3(Math.cos(angle) * outer, groundHeight, Math.sin(angle) * outer);
+    });
+    const [x, z] = placement.direction;
+    const reach = outer + arrowReach(outer);
+    points.push(new THREE.Vector3(x * reach, groundHeight, z * reach));
+    return points;
   }
 
   function update(camera, width, height, scale, replaying) {
-    group.visible = false;
-    if (!footprint || replaying || !width || !height) return;
-
-    function project(point) {
-      projected.copy(point).project(camera);
-      return { x: (projected.x + 1) * width / 2, y: (1 - projected.y) * height / 2, z: projected.z };
-    }
-
-    function inFrame(point) {
-      return point.z >= -1 && point.z <= 1 && point.x >= 12 && point.x <= width - 12
-        && point.y >= 12 && point.y <= height - 12;
-    }
-
-    const a = project(start);
-    if (!inFrame(a)) return;
-    if (!edges.has(scale)) {
-      edges.set(scale, nearestFootprintPoint(footprint.positions, footprint.indices, start.x / scale, start.z / scale));
-    }
-    const edge = edges.get(scale);
-    if (!edge) return;
-    end.set(edge[0] * scale, start.y, edge[2] * scale);
-    const b = project(end);
-    if (!inFrame(b) || Math.hypot(b.x - a.x, b.y - a.y) < 28) return;
-    middle.lerpVectors(start, end, 0.5);
-    const m = project(middle);
-
+    group.visible = Boolean(placement && !replaying && width && height);
+    if (!group.visible) return;
     if (drawnScale !== scale) {
-      setSegment(line, start, end);
-      // Link the bed measurement to the actual clay edge when it overhangs.
-      surface.copy(end).setY(edge[1] * scale);
-      extension.visible = surface.y - end.y > 0.2;
-      if (extension.visible) setSegment(extension, end, surface);
-      const label = formatLength(start.distanceTo(end)) + ' mm to edge';
-      if (label !== drawnLabel) {
-        paintLabel(distanceLabel, label);
-        drawnLabel = label;
-      }
+      const inner = placement.radius * scale + ringGap;
+      const outer = inner + ringWidth;
+      const [x, z] = placement.direction;
+      ring.geometry.dispose();
+      ring.geometry = new THREE.RingGeometry(inner, outer, 96);
+      start.set(x * outer, groundHeight, z * outer);
+      const reach = outer + arrowReach(outer);
+      tip.set(x * reach, groundHeight, z * reach);
       drawnScale = scale;
     }
 
-    function placeLabel(art, anchor, point, side) {
-      const half = art.width / 2;
-      const x = Math.max(half + 12, Math.min(width - half - 12, point.x));
-      const y = point.y + side * (art.height / 2 + 9);
-      art.sprite.visible = art.width + 24 <= width && y - art.height / 2 >= 42 && y + art.height / 2 <= height - 42;
-      art.sprite.position.copy(anchor);
-      art.sprite.center.set(0.5 + (point.x - x) / art.width, side < 0 ? -9 / art.height : 1 + 9 / art.height);
-      return art.sprite.visible;
-    }
+    const a = arrow.position.copy(start).project(camera);
+    const b = label.sprite.position.copy(tip).project(camera);
+    const x = (a.x + 1) * width / 2;
+    const y = (1 - a.y) * height / 2;
+    const dx = (b.x - a.x) * width / 2;
+    const dy = (a.y - b.y) * height / 2;
+    const projectedLength = Math.hypot(dx, dy);
+    const visible = a.z >= -1 && a.z <= 1 && b.z >= -1 && b.z <= 1 && projectedLength >= 0.5
+      && x >= 8 && x <= width - 8 && y >= 8 && y <= height - 8;
+    arrow.visible = label.sprite.visible = visible;
+    if (!visible) return;
 
-    let direction = m.y <= a.y ? -1 : 1;
-    if (!placeLabel(distanceLabel, middle, m, direction)) {
-      direction *= -1;
-      if (!placeLabel(distanceLabel, middle, m, direction)) return;
-    }
-    placeLabel(originLabel, start, a, -direction);
-    dot.sprite.position.copy(start);
+    const length = THREE.MathUtils.clamp(projectedLength, 26, 72);
     const unit = 2 / (height * camera.projectionMatrix.elements[5]);
-    for (const art of [dot, distanceLabel, originLabel]) art.sprite.scale.set(art.width * unit, art.height * unit, 1);
-    group.visible = true;
+    arrow.position.copy(start);
+    arrow.material.rotation = Math.atan2(-dy, dx);
+    arrow.scale.set(length * unit, 22 * unit, 1);
+    const labelX = THREE.MathUtils.clamp(x + dx / projectedLength * length * 0.77, label.width / 2 + 12, width - label.width / 2 - 12);
+    const labelAnchorY = y + dy / projectedLength * length * 0.77;
+    const labelY = THREE.MathUtils.clamp(labelAnchorY + (dy > 0 ? 24 : -24), 47, height - 47);
+    label.sprite.position.copy(start);
+    label.sprite.center.set(0.5 + (x - labelX) / label.width, 0.5 + (labelY - y) / label.height);
+    label.sprite.scale.set(label.width * unit, label.height * unit, 1);
   }
 
-  return { group, setMesh, update };
+  return { group, setMesh, getFramePoints, update };
 }

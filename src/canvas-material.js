@@ -1,8 +1,10 @@
 import { MeshPhysicalMaterial } from 'three';
+import { placementMarkShader } from './origin-guide.js';
 import { surfaceBumpShader } from './surface-bump.js';
 
 const canvasSurface = `
 varying vec2 vCanvasPosition;
+${placementMarkShader}
 
 float canvasHash(vec2 point) {
   vec3 seed = fract(point.xyx * vec3(0.1031, 0.1030, 0.0973));
@@ -98,9 +100,17 @@ canvasTone += 0.10 * abrasion.y - 0.11 * abrasion.x;
   canvasTone += 0.085 * fibers + 0.04 * yarnSlub;
 #endif
 diffuseColor.rgb *= canvasTone * (1.0 - pigment * vec3(0.05, 0.075, 0.10));
+if (placementMark.x > 0.0) {
+  // Pigment follows the yarns and lets the existing color variation and relief show through.
+  float edge = placementMarkDistance(clothPoint + 0.42 * drift);
+  float feather = max(0.35, fwidth(edge) * 0.65);
+  float uptake = 0.88 + 0.10 * mix(cotton, yarnTone, detail * 0.52);
+  float stain = uptake * (1.0 - smoothstep(-feather, feather, edge));
+  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.84, 0.21, 0.35), stain);
+}
 `;
 
-export function createCanvasMaterial(high) {
+export function createCanvasMaterial(high, mark) {
   const material = new MeshPhysicalMaterial({
     color: '#a89b86',
     roughness: 0.94,
@@ -114,6 +124,7 @@ export function createCanvasMaterial(high) {
 
   // Use world-space millimeters so every yarn can vary without a repeated texture tile.
   material.onBeforeCompile = shader => {
+    shader.uniforms.placementMark = mark;
     shader.vertexShader = `varying vec2 vCanvasPosition;\n` + shader.vertexShader.replace(
       '#include <begin_vertex>',
       '#include <begin_vertex>\nvCanvasPosition = (modelMatrix * vec4(position, 1.0)).xz;',

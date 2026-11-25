@@ -8,6 +8,61 @@ const ringWidth = 10;
 const groundHeight = 0.08;
 const artworkScale = 2;
 
+// The preview and studio canvas use the same mark in bed coordinates (millimeters).
+export const placementMarkShader = `
+uniform vec4 placementMark;
+
+float placementMarkDistance(vec2 point) {
+  float outer = placementMark.x;
+  float reach = placementMark.y;
+  vec2 direction = placementMark.zw;
+  float radial = length(point);
+  float ring = max(radial - outer, outer - ${ringWidth.toFixed(1)} - radial);
+
+  float along = dot(point, direction) - outer;
+  float across = abs(dot(point, vec2(-direction.y, direction.x)));
+  float shoulder = reach * 0.42;
+  float shaft = max(max(-${(ringWidth / 2).toFixed(1)} - along, along - reach * 0.64), across - reach * 0.22);
+  float head = max(shoulder - along, max(along - reach, (across - (reach - along) * 0.86) * 0.76));
+  return min(ring, min(shaft, head));
+}
+`;
+
+function createPreviewMark(mark) {
+  const material = new THREE.ShaderMaterial({
+    uniforms: { placementMark: mark, markColor: { value: new THREE.Color(red) } },
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -8,
+    vertexShader: `
+      varying vec2 markPoint;
+      void main() {
+        vec4 point = modelMatrix * vec4(position, 1.0);
+        markPoint = point.xz;
+        gl_Position = projectionMatrix * viewMatrix * point;
+      }
+    `,
+    fragmentShader: `
+      varying vec2 markPoint;
+      uniform vec3 markColor;
+      ${placementMarkShader}
+      void main() {
+        float edge = placementMarkDistance(markPoint);
+        float feather = max(0.05, fwidth(edge) * 0.6);
+        gl_FragColor = vec4(markColor, 0.8 * (1.0 - smoothstep(-feather, feather, edge)));
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = groundHeight;
+  mesh.renderOrder = 4;
+  return mesh;
+}
+
 export function getOriginPlacement(positions, origin) {
   if (!origin?.every(Number.isFinite)) return;
   const distance = Math.hypot(...origin);
@@ -26,42 +81,16 @@ export function getOriginPlacement(positions, origin) {
   };
 }
 
-function makeSprite(width, height) {
+const labelFont = '700 12px monospace';
+
+function makeLabel(text) {
+  const width = Math.ceil(text.length * 7.25) + 14;
+  const height = 22;
   const canvas = document.createElement('canvas');
   canvas.width = width * artworkScale;
   canvas.height = height * artworkScale;
   const context = canvas.getContext('2d');
   context.scale(artworkScale, artworkScale);
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map, sizeAttenuation: false, depthTest: false, depthWrite: false, toneMapped: false, fog: false,
-  }));
-  sprite.renderOrder = 5;
-  return { sprite, context, width, height };
-}
-
-function makeArrow() {
-  const arrow = makeSprite(56, 24);
-  const { sprite, context } = arrow;
-  sprite.center.set(0, 0.5);
-  context.fillStyle = red;
-  context.strokeStyle = cream;
-  context.lineWidth = 2;
-  context.lineJoin = 'round';
-  context.beginPath();
-  for (const [x, y] of [[1, 8], [35, 8], [35, 2], [54, 12], [35, 22], [35, 16], [1, 16]]) context.lineTo(x, y);
-  context.closePath();
-  context.stroke();
-  context.fill();
-  return sprite;
-}
-
-const labelFont = '700 12px monospace';
-
-function makeLabel(text) {
-  const label = makeSprite(Math.ceil(text.length * 7.25) + 14, 22);
-  const { context, width, height } = label;
   context.fillStyle = red;
   context.fillRect(0, 0, width, height);
   context.fillStyle = ink;
@@ -71,8 +100,13 @@ function makeLabel(text) {
   context.textBaseline = 'middle';
   context.fillStyle = cream;
   context.fillText(text, width / 2, height / 2 + 0.5);
-  label.sprite.renderOrder = 6;
-  return label;
+  const map = new THREE.CanvasTexture(canvas);
+  map.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+    map, sizeAttenuation: false, depthWrite: false, toneMapped: false, fog: false,
+  }));
+  sprite.renderOrder = 6;
+  return { sprite, width, height };
 }
 
 function arrowReach(radius) {
@@ -81,18 +115,11 @@ function arrowReach(radius) {
 
 export function createOriginGuide() {
   const group = new THREE.Group();
-  const ring = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
-    color: red, side: THREE.DoubleSide, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false, fog: false,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
-  }));
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = groundHeight;
-  ring.renderOrder = 4;
-  const arrow = makeArrow();
-  group.add(ring, arrow);
+  const mark = { value: new THREE.Vector4(0, 0, 0, 0) };
+  const previewMark = createPreviewMark(mark);
+  group.add(previewMark);
   group.visible = false;
-  const start = new THREE.Vector3();
-  const tip = new THREE.Vector3();
+  const projected = new THREE.Vector3();
   let placement;
   let label;
   let drawnScale;
@@ -126,45 +153,37 @@ export function createOriginGuide() {
     return points;
   }
 
-  function update(camera, width, height, scale, replaying) {
+  function update(camera, width, height, scale, replaying, onCanvas) {
     group.visible = Boolean(placement && !replaying && width && height);
-    if (!group.visible) return;
+    // A zero radius also clears the mark on the canvas when nothing is visible.
+    if (!group.visible) {
+      mark.value.x = 0;
+      return;
+    }
+    previewMark.visible = !onCanvas;
+    const outer = placement.radius * scale + ringGap + ringWidth;
+    const reach = arrowReach(outer);
+    const [x, z] = placement.direction;
+    mark.value.set(outer, reach, x, z);
     if (drawnScale !== scale) {
-      const inner = placement.radius * scale + ringGap;
-      const outer = inner + ringWidth;
-      const [x, z] = placement.direction;
-      ring.geometry.dispose();
-      ring.geometry = new THREE.RingGeometry(inner, outer, 96);
-      start.set(x * outer, groundHeight, z * outer);
-      const reach = outer + arrowReach(outer);
-      tip.set(x * reach, groundHeight, z * reach);
+      const size = 2 * (outer + reach + 1);
+      previewMark.scale.set(size, size, 1);
+      const anchor = outer + reach * 0.78;
+      label.sprite.position.set(x * anchor, groundHeight + 0.15, z * anchor);
       drawnScale = scale;
     }
 
-    const a = arrow.position.copy(start).project(camera);
-    const b = label.sprite.position.copy(tip).project(camera);
-    const x = (a.x + 1) * width / 2;
-    const y = (1 - a.y) * height / 2;
-    const dx = (b.x - a.x) * width / 2;
-    const dy = (a.y - b.y) * height / 2;
-    const projectedLength = Math.hypot(dx, dy);
-    const visible = a.z >= -1 && a.z <= 1 && b.z >= -1 && b.z <= 1 && projectedLength >= 0.5
-      && x >= 8 && x <= width - 8 && y >= 8 && y <= height - 8;
-    arrow.visible = label.sprite.visible = visible;
-    if (!visible) return;
-
-    const length = THREE.MathUtils.clamp(projectedLength, 26, 72);
+    projected.copy(label.sprite.position).project(camera);
+    const screenX = (projected.x + 1) * width / 2;
+    const screenY = (1 - projected.y) * height / 2;
+    label.sprite.visible = projected.z >= -1 && projected.z <= 1
+      && screenX >= 8 && screenX <= width - 8 && screenY >= 34 && screenY <= height - 12;
+    if (!label.sprite.visible) return;
+    const labelX = THREE.MathUtils.clamp(screenX, label.width / 2 + 12, width - label.width / 2 - 12);
     const unit = 2 / (height * camera.projectionMatrix.elements[5]);
-    arrow.position.copy(start);
-    arrow.material.rotation = Math.atan2(-dy, dx);
-    arrow.scale.set(length * unit, 22 * unit, 1);
-    const labelX = THREE.MathUtils.clamp(x + dx / projectedLength * length * 0.77, label.width / 2 + 12, width - label.width / 2 - 12);
-    const labelAnchorY = y + dy / projectedLength * length * 0.77;
-    const labelY = THREE.MathUtils.clamp(labelAnchorY + (dy > 0 ? 24 : -24), 47, height - 47);
-    label.sprite.position.copy(start);
-    label.sprite.center.set(0.5 + (x - labelX) / label.width, 0.5 + (labelY - y) / label.height);
+    label.sprite.center.set(0.5 + (screenX - labelX) / label.width, -0.56);
     label.sprite.scale.set(label.width * unit, label.height * unit, 1);
   }
 
-  return { group, setMesh, getFramePoints, update };
+  return { group, mark, setMesh, getFramePoints, update };
 }

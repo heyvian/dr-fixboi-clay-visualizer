@@ -195,7 +195,8 @@ export function createViewer(container, axes, drafting) {
       camera.updateMatrixWorld();
       const { clientWidth: width, clientHeight: height } = container;
       const showingVic = vicDisplay.mesh.visible;
-      originGuide.update(camera, width, height, comparing || showingVic ? 1 : clay.scale.x, showingVic && vicMode === 'demo');
+      originGuide.update(camera, width, height, comparing || showingVic ? 1 : clay.scale.x,
+        showingVic && vicMode === 'demo', studioFloor?.visible);
       renderer.render(scene, camera);
       drawAxes(axes, camera);
       if (!drafting.hidden && clay.visible) {
@@ -467,7 +468,7 @@ export function createViewer(container, axes, drafting) {
       const environment = pmrem.fromScene(room, high ? 0.025 : 0.04, 0.1, 100, { size: high ? 512 : 256 });
       pmrem.dispose();
       room.dispose();
-      studioTiers.set(high, { environment, clay: createClayMaterial(high), canvas: createCanvasMaterial(high) });
+      studioTiers.set(high, { environment, clay: createClayMaterial(high), canvas: createCanvasMaterial(high, originGuide.mark) });
     }
     return studioTiers.get(high);
   }

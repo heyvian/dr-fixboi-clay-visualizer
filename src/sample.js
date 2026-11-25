@@ -45,3 +45,18 @@ export function makeSample() {
   lines.push('G0 Z110', 'M2', '');
   return lines.join('\n');
 }
+
+export function makeOverhangSample() {
+  const lines = ['; VIC overhang sample', 'G21', 'G90', 'M83', 'G1 F1200'];
+  for (let layer = 0; layer < 20; layer++) {
+    const height = 1 + layer * 2.5;
+    const offset = Math.min(layer, 8) * 0.3 + Math.max(0, layer - 8) * 4.5;
+    for (let i = 0; i <= 18; i++) {
+      const along = i / 18 * 2 - 1;
+      const x = (offset + 9 * along ** 2).toFixed(3);
+      const y = (along * 32).toFixed(3);
+      lines.push(i ? `G1 X${x} Y${y} E0.4` : `G0 X${x} Y${y} Z${height}`);
+    }
+  }
+  return lines.join('\n');
+}

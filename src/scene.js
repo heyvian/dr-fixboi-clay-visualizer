@@ -5,6 +5,7 @@ import { createClayMaterial } from './clay-material.js';
 import { createCanvasMaterial } from './canvas-material.js';
 import { drawDimensions } from './dimensions.js';
 import { createStudioProps } from './studio-props.js';
+import { createVicDisplay } from './vic-display.js';
 
 const sceneColors = {
   clay: '#ed619e',
@@ -159,6 +160,8 @@ export function createViewer(container, axes, drafting) {
     side: THREE.DoubleSide,
   });
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
+  const vicDisplay = createVicDisplay();
+  let hasMesh = false;
   const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
     transparent: true, colorWrite: false,
   }));
@@ -175,7 +178,7 @@ export function createViewer(container, axes, drafting) {
   const studioBounds = new THREE.Box3();
   let studioFramed = false;
   clay.visible = false;
-  scene.add(clay, printedDepth, printedGhost);
+  scene.add(clay, printedDepth, printedGhost, vicDisplay.mesh);
   const draftingBounds = new THREE.Box3();
   let shouldDraw = false;
   let draftingEnabled = false;
@@ -210,20 +213,24 @@ export function createViewer(container, axes, drafting) {
   }
 
   function reset() {
-    if (!clay.visible) return;
+    if (!hasMesh) return;
     studioFramed = false;
     controls.enablePan = false;
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const scale = comparing ? 1 : clay.scale.x;
-    const radius = sphere.radius * scale;
+    const scale = comparing || vicDisplay.mesh.visible ? 1 : clay.scale.x;
+    const center = sphere.center.clone().multiplyScalar(scale);
+    let radius = sphere.radius * scale;
+    const clearance = vicDisplay.mesh.visible ? Math.max(0, clay.geometry.boundingBox.min.y) / 2 : 0;
+    center.y -= clearance;
+    radius += clearance;
     const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
-    frame(sphere.center.clone().multiplyScalar(scale), new THREE.Vector3(0.52, 0.4, 1).normalize(), radius, distance);
+    frame(center, new THREE.Vector3(0.52, 0.4, 1).normalize(), radius, distance);
   }
 
   function frameStudio() {
-    if (!studioProps?.group.visible || !clay.visible) return;
+    if (!studioProps?.group.visible || !hasMesh) return;
     studioFramed = true;
     controls.enablePan = true;
     const { center, radius } = studioBounds.getBoundingSphere(new THREE.Sphere());
@@ -301,10 +308,11 @@ export function createViewer(container, axes, drafting) {
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
+    vicDisplay.setMesh(geometry, mesh.analysis);
     clay.geometry.dispose();
     clay.geometry = printedGhost.geometry = printedDepth.geometry = geometry;
-    clay.visible = true;
-    printedDepth.visible = printedGhost.visible = comparing;
+    hasMesh = true;
+    updateMeshVisibility();
     const totalSize = Math.max(size.x, size.y, size.z);
     const spacing = 10 ** Math.floor(Math.log10(totalSize));
     grid.material.uniforms.interval.value = spacing;
@@ -356,7 +364,7 @@ export function createViewer(container, axes, drafting) {
   function setScale(scale) {
     if (clay.scale.x === scale) return;
     clay.scale.setScalar(scale);
-    if (clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    if (hasMesh) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     render();
   }
 
@@ -369,8 +377,9 @@ export function createViewer(container, axes, drafting) {
   }
 
   function updateDraftingView() {
-    drafting.hidden = !(draftingEnabled || comparing);
-    camera.zoom = comparing ? 0.72 : (draftingEnabled ? 0.85 : 1);
+    const vicVisible = vicDisplay.mesh.visible;
+    drafting.hidden = vicVisible || !(draftingEnabled || comparing);
+    camera.zoom = vicVisible ? 1 : comparing ? 0.72 : (draftingEnabled ? 0.85 : 1);
     camera.updateProjectionMatrix();
     render();
   }
@@ -383,13 +392,42 @@ export function createViewer(container, axes, drafting) {
   function setComparison(active) {
     const changed = comparing !== active;
     comparing = active;
-    printedDepth.visible = printedGhost.visible = active && clay.visible;
-    if (changed && studioProps?.group.visible && clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    updateMeshVisibility();
+    if (changed && studioProps?.group.visible && hasMesh) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     updateDraftingView();
   }
 
+  function updateMeshVisibility() {
+    clay.visible = hasMesh && !vicDisplay.mesh.visible;
+    printedDepth.visible = printedGhost.visible = comparing && clay.visible;
+  }
+
+  function setVicView(mode, progress = 0) {
+    const wasVisible = vicDisplay.mesh.visible;
+    vicDisplay.show(mode, progress);
+    if (wasVisible !== vicDisplay.mesh.visible) {
+      updateMeshVisibility();
+      renderer.shadowMap.needsUpdate = true;
+      updateDraftingView();
+    }
+    render();
+  }
+
+  function focusVic(spot) {
+    if (!vicDisplay.mesh.visible) return;
+    studioFramed = false;
+    controls.enablePan = true;
+    const center = new THREE.Vector3(spot.x, spot.z, -spot.y);
+    const { radius, center: middle } = clay.geometry.boundingSphere;
+    const direction = center.clone().sub(middle).setY(0);
+    if (direction.lengthSq() < 0.001) direction.set(0.52, 0, 1);
+    direction.normalize().setY(0.34).normalize();
+    const view = Math.min(1, camera.aspect) * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    frame(center, direction, radius * 0.5, radius * 0.62 / view);
+  }
+
   function zoom(amount) {
-    if (!clay.visible) return;
+    if (!hasMesh) return;
     const direction = camera.position.clone().sub(controls.target);
     const next = THREE.MathUtils.clamp(direction.length() * amount, controls.minDistance, controls.maxDistance);
     camera.position.copy(controls.target).add(direction.setLength(next));
@@ -492,7 +530,7 @@ export function createViewer(container, axes, drafting) {
     renderer.shadowMap.enabled = active;
     key.castShadow = active;
     clay.castShadow = clay.receiveShadow = active;
-    if (active && clay.visible) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
+    if (active && hasMesh) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     if (!active) {
       key.position.set(-4, 7, 4);
       key.target.position.set(0, 0, 0);
@@ -508,5 +546,5 @@ export function createViewer(container, axes, drafting) {
     }
   }
 
-  return { setMesh, setAppearance, setScale, setDrafting, setComparison, zoom, reset, frameStudio };
+  return { setMesh, setAppearance, setScale, setDrafting, setComparison, setVicView, focusVic, zoom, reset, frameStudio };
 }

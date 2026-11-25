@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { inspectToolpath, parseGcode } from '../src/gcode.js';
 import { makeClayMesh } from '../src/clay.js';
-import { makeSample } from '../src/sample.js';
+import { makeOverhangSample, makeSample } from '../src/sample.js';
 import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
@@ -53,6 +53,11 @@ test('tessellates XY arcs with relative centers and helical Z motion', () => {
   const midpoint = paths[0][Math.floor(paths[0].length / 2)];
   assert.ok(Math.abs(Math.hypot(midpoint[0], midpoint[1]) - 10) < 0.001);
   assert.ok(midpoint[2] > 0.8 && midpoint[2] < 1.2);
+});
+
+test('keeps deposited sample timing through modal feed, travel and a dwell', () => {
+  const model = parseGcode('G1 F600\nG0 Z1\nG1 X10 E1\nG4 P2500\nG0 X30\nG1 X40 E2');
+  assert.deepEqual(model.times.map(run => run.map(time => Number(time.toFixed(2)))), [[0.1, 1.1], [5.6, 6.6]]);
 });
 
 test('uses motor-gated clay moves and skips unsupported arcs', () => {
@@ -114,6 +119,36 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
   assert.deepEqual(alertsFor(30, 39), []);
   assert.deepEqual(alertsFor(30, 40), []);
   assert.deepEqual(alertsFor(-36, 48), ['Your object appears to be 60 mm off center from X0 Y0.']);
+});
+
+test('VIC keeps a short vertical wall standing and demonstrates a failed overhang', () => {
+  const options = { nozzle: 4, viscosity: 65, gravity: true, quality: 'vic' };
+  const wall = Array.from({ length: 12 }, (_, i) => 'G0 Y0 Z' + (1 + 2.5 * i) + '\nG1 Y50 E10').join('\n');
+  const stable = makeClayMesh(parseGcode('M83\n' + wall), options).analysis;
+  assert.equal(stable.held, 1);
+  assert.equal(stable.hotspots.length, 0);
+  const result = makeClayMesh(parseGcode(makeOverhangSample()), options);
+  const { analysis } = result;
+  assert.equal(analysis.hotspots[0].cases, analysis.totalCases);
+  assert.ok(analysis.firstFailure > 1 && analysis.firstFailure < analysis.frames);
+  assert.ok(analysis.held > 0.25 && analysis.held < 0.75);
+  assert.equal(analysis.nodeIds.length, result.positions.length / 3);
+  assert.equal(analysis.sections.length, analysis.frames * analysis.votes.length * 2);
+  const lastFrame = analysis.trajectory.subarray((analysis.frames - 1) * analysis.votes.length * 4);
+  let landed = false;
+  for (let i = 0; i < analysis.votes.length; i++) {
+    assert.equal(lastFrame[i * 4 + 3], 1);
+    const base = analysis.centers[i * 3 + 1];
+    const settled = base + lastFrame[i * 4 + 1];
+    assert.ok(settled >= -0.001);
+    if (base > 20 && settled < 0.01) landed = true;
+  }
+  assert.ok(landed);
+
+  const gravityOff = makeClayMesh(parseGcode(makeOverhangSample()), { ...options, gravity: false }).analysis;
+  assert.equal(gravityOff.trajectory, undefined);
+  assert.equal(gravityOff.votes.some(Boolean), false);
+  assert.equal(normalizeSettings({ quality: 'vic' }).quality, 'vic');
 });
 
 function meshSize({ positions, indices }) {

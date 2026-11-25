@@ -451,6 +451,29 @@ a:hover { color: #291437; }
 .quality-choices label + label span { border-left: 0; }
 .quality-choices label:hover span { background: #f8d4e9; }
 .quality-choices input:checked + span { background: var(--green); }
+.simulation-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.simulation-choices span { padding-inline: .15rem; }
+.vic-panel { margin-top: .9rem; border-top: 1px solid #d9c8e4; padding-top: .75rem; }
+.vic-panel h3 { margin: 0; font: 700 .79rem var(--mono); text-transform: uppercase; }
+.vic-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem; font: 500 .73rem var(--mono); }
+.vic-legend span { display: flex; align-items: center; gap: .28rem; }
+.vic-legend i { width: .65rem; height: .65rem; border: 1px solid var(--ink); flex: none; }
+.vic-hold { background: #799b93; }
+.vic-mild { background: #f5c451; }
+.vic-high { background: #ff743f; }
+.vic-severe { background: #f73564; }
+.vic-hotspots { margin: .55rem 0; padding-left: 1.4rem; font: 500 .75rem/1.4 var(--mono); }
+.vic-hotspots li { margin: .35rem 0; }
+.vic-hotspots button { padding: 0; border: 0; background: none; color: var(--purple); text-align: left; text-decoration: underline; }
+.vic-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .6rem; }
+.vic-actions [aria-pressed='true'], .vic-actions [aria-expanded='true'] { background: var(--green); }
+.vic-player { position: absolute; bottom: .85rem; left: .75rem; right: .75rem; max-width: 27rem; margin-inline: auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .4rem .65rem; padding: .55rem; background: #ede2f8; color: var(--ink); border: 1px solid #b99bc9; }
+.vic-player p { grid-column: 1 / -1; margin: 0; font: 700 .75rem var(--mono); }
+.vic-player button { padding: .3rem .52rem; }
+.vic-player input { width: 100%; accent-color: var(--purple); }
+.viewport:has(.vic-player:not([hidden])) :is(.scene-hint, .axis-key) { display: none; }
+.vic-sample { margin-top: .7rem; padding: 0; color: var(--ink); border: 0; background: none; text-decoration: underline; font: inherit; font-size: .82rem; }
+.vic-view #comparison-key { display: none !important; }
 .quality-choices input:focus-visible + span { position: relative; z-index: 1; outline: 3px solid var(--purple); outline-offset: 2px; }
 
 .render-window { margin-top: 1.3rem; }

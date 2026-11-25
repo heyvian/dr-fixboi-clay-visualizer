@@ -36,7 +36,7 @@ function xyArc(start, end, words, scale, offset, absolute, clockwise) {
   const distance = clockwise ? (startAngle - endAngle + tau) % tau : (endAngle - startAngle + tau) % tau;
   const sweep = (distance || tau) * (clockwise ? -1 : 1);
   const steps = Math.min(1_200, Math.max(4, Math.ceil(Math.abs(sweep) / 0.09), Math.ceil(Math.abs(sweep) * radius / 2)));
-  return { steps, point(fraction) {
+  return { steps, length: Math.hypot(radius * sweep, end[2] - start[2]), point(fraction) {
     if (fraction === 1) return end;
     const angle = startAngle + sweep * fraction;
     return [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle), mix(start[2], end[2], fraction)];
@@ -60,12 +60,17 @@ export function parseGcode(source) {
   let skippedArcs = 0;
   let run;
   let runAmounts;
+  let runTimes;
   let lastMode;
+  let elapsed = 0;
+  let feed = 1500;
   const axes = ['X', 'Y', 'Z'];
   const tools = new Map([[0, { e: 0, retracted: 0 }]]);
   const explicit = [];
   const extrusion = [];
   const inferred = [];
+  const explicitTimes = [];
+  const inferredTimes = [];
 
   for (const rawLine of source.split(/\r?\n|\r/)) {
     const line = rawLine.split(';', 1)[0].replace(/\([^)]*\)/g, '').split('*', 1)[0].toUpperCase();
@@ -106,6 +111,11 @@ export function parseGcode(source) {
     }
 
     const tool = tools.get(activeTool);
+    if (words.get('F') > 0 && (moves || !suppressMove)) feed = words.get('F') * scale;
+    if (words.get('G') === 4) {
+      elapsed += Math.max(0, words.get('S') ?? (words.get('P') ?? 0) / 1000);
+      continue;
+    }
     if (words.get('G') === 92) {
       axes.forEach((axis, index) => {
         if (words.has(axis)) offset[index] = position[index] - words.get(axis) * scale;
@@ -138,8 +148,11 @@ export function parseGcode(source) {
     }
     const isArc = motion === 2 || motion === 3;
     const arc = isArc && xyPlane ? xyArc(start, position, words, scale, offset, arcAbsolute, motion === 2) : null;
+    const length = Math.hypot(position[0] - start[0], position[1] - start[1], position[2] - start[2]);
+    const started = elapsed;
+    elapsed += (arc?.length ?? length) * 60 / Math.max(3, feed);
     const horizontal = arc || Math.hypot(position[0] - start[0], position[1] - start[1]) > 0.0001;
-    const traveling = !arc && Math.hypot(...position.map((value, index) => value - start[index])) < 0.0001;
+    const traveling = !arc && length < 0.0001;
     if (traveling) continue;
 
     const isExplicit = depositedFraction > 0 || (motorOn && motion !== 0 && !words.has('E'));
@@ -156,13 +169,19 @@ export function parseGcode(source) {
     if (!run || lastMode !== mode || from > 0) {
       run = [point(from)];
       mode.push(run);
+      runTimes = [mix(started, elapsed, from)];
+      (isExplicit ? explicitTimes : inferredTimes).push(runTimes);
       if (isExplicit) {
         runAmounts = [];
         extrusion.push(runAmounts);
       }
     }
     const steps = arc ? Math.max(1, Math.ceil(arc.steps * (1 - from))) : 1;
-    for (let step = 1; step <= steps; step++) run.push(point(mix(from, 1, step / steps)));
+    for (let step = 1; step <= steps; step++) {
+      const fraction = mix(from, 1, step / steps);
+      run.push(point(fraction));
+      runTimes.push(mix(started, elapsed, fraction));
+    }
     if (isExplicit) {
       for (let step = 0; step < steps; step++) runAmounts.push(depositedAmount / steps);
     }
@@ -192,7 +211,8 @@ export function parseGcode(source) {
   if (Math.max(...dimensions) > 1_000_000 || !dimensions.every(Number.isFinite)) {
     throw new Error('The print dimensions exceed the preview range. Check the file units.');
   }
-  return { paths, low, high, dimensions, inferExtrusion, skippedArcs, extrusion: inferExtrusion ? undefined : extrusion };
+  return { paths, low, high, dimensions, inferExtrusion, skippedArcs,
+    extrusion: inferExtrusion ? undefined : extrusion, times: inferExtrusion ? inferredTimes : explicitTimes };
 }
 
 export function inspectToolpath(model, nozzle) {

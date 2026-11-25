@@ -1,5 +1,6 @@
 import { solveBeadFlow } from './bead-flow.js';
 import { defaultNozzle } from './settings.js';
+import { simulateVic } from './vic.js';
 
 const maximumRings = 150_000;
 const maximumRingVertices = 1_800_000;
@@ -35,9 +36,10 @@ function turnsAt(previous, point, next, incomingLength) {
   return dot < 0.992 * incomingLength * outgoingLength;
 }
 
-function sampleDeposition(path, amounts, origin, spacing, typicalRate) {
+function sampleDeposition(path, amounts, origin, spacing, typicalRate, times) {
   const points = [path[0].map((value, axis) => value - origin[axis])];
   const edgeAreas = [];
+  const sampledTimes = times ? [times[0]] : undefined;
   let covered = 0;
   let volume = 0;
   for (let i = 1; i < path.length; i++) {
@@ -55,6 +57,7 @@ function sampleDeposition(path, amounts, origin, spacing, typicalRate) {
       traveled += step;
       volume += step * area;
       points.push(previous.map((value, axis) => value - origin[axis] + (point[axis] - value) * traveled / length));
+      if (times) sampledTimes.push(times[i - 1] + (times[i] - times[i - 1]) * traveled / length);
       edgeAreas.push(volume / spacing);
       covered = 0;
       volume = 0;
@@ -64,21 +67,22 @@ function sampleDeposition(path, amounts, origin, spacing, typicalRate) {
     const end = i === path.length - 1;
     if (covered > 1e-7 && (end || (covered > spacing * 0.18 && turnsAt(previous, point, path[i + 1], length)))) {
       points.push(point.map((value, axis) => value - origin[axis]));
+      if (times) sampledTimes.push(times[i]);
       edgeAreas.push(volume / covered);
       covered = 0;
       volume = 0;
     }
   }
-  return { points, edgeAreas };
+  return { points, edgeAreas, times: sampledTimes };
 }
 
-function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typicalRate) {
+function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typicalRate, vic) {
   const paths = [];
   let rings = 0;
   let segments = 0;
   let caps = 0;
   for (const [index, path] of model.paths.entries()) {
-    const run = accurate ? sampleDeposition(path, model.extrusion?.[index], origin, spacing, typicalRate)
+    const run = accurate ? sampleDeposition(path, model.extrusion?.[index], origin, spacing, typicalRate, vic ? model.times?.[index] : undefined)
       : { points: samplePath(path, origin, spacing, minStep) };
     const samples = run.points;
     if (samples.length < 2) continue;
@@ -88,12 +92,15 @@ function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typical
       && Math.abs(start[2] - end[2]) <= 0.05
       && distance(start, end) <= Math.min(diameter * 0.12, 0.6);
     // A near-closed perimeter gets one shared ring in place of two overlapping caps.
-    if (closed) samples.pop();
+    if (closed) {
+      samples.pop();
+      run.times?.pop();
+    }
     else caps += 2;
     paths.push({ ...run, closed });
     rings += samples.length;
     segments += closed ? samples.length : samples.length - 1;
-    if (rings > maximumRings) return undefined;
+    if (rings > (vic ? 18_000 : maximumRings)) return undefined;
   }
   return { paths, rings, segments, caps };
 }
@@ -209,9 +216,11 @@ function applyGravity(paths, diameter, height, softness, accurate) {
 export function makeClayMesh(model, options) {
   const diameter = clamp(Number(options.nozzle) || defaultNozzle, 0.2, 30);
   const softness = 1 - clamp(Number(options.viscosity) || 0, 0, 100) / 100;
-  const accurate = options.quality === 'accurate';
+  const vic = options.quality === 'vic';
+  const accurate = options.quality === 'accurate' || vic;
   const extent = Math.max(...model.dimensions, diameter);
   const origin = [(model.low[0] + model.high[0]) / 2, (model.low[1] + model.high[1]) / 2, model.low[2]];
+  if (vic) origin[2] = Math.min(0, origin[2]);
   let length = 0;
   let points = 0;
   let totalExtrusion = 0;
@@ -228,28 +237,34 @@ export function makeClayMesh(model, options) {
       }
     }
   }
-  const step = accurate ? Math.max(Math.min(diameter * 0.12, 0.9), length / 115_000)
+  const step = vic ? Math.max(diameter * 0.45, length / 12_000)
+    : accurate ? Math.max(Math.min(diameter * 0.12, 0.9), length / 115_000)
     : Math.max(diameter * 0.7, extent / 200, length / 60_000);
   const minStep = points < 70_000 ? 0.001 : Math.max(0.001, step * 0.7);
   const typicalRate = measuredLength ? totalExtrusion / measuredLength : 0;
-  let sampled = sampleRuns(model, origin, diameter, step, minStep, accurate, typicalRate);
+  let sampled = sampleRuns(model, origin, diameter, step, minStep, accurate, typicalRate, vic);
   if (accurate) {
-    for (const factor of [1.7, 3.2]) {
+    for (const factor of (vic ? [1.7, 3.2, 6.4, 12.8] : [1.7, 3.2])) {
       if (sampled) break;
-      sampled = sampleRuns(model, origin, diameter, step * factor, minStep, true, typicalRate);
+      sampled = sampleRuns(model, origin, diameter, step * factor, minStep, true, typicalRate, vic);
     }
   }
-  if (!sampled) throw new Error('This toolpath is too detailed to display. Try a smaller print.');
+  if (!sampled) throw new Error(vic ? 'This toolpath is too detailed for VIC. Try Accurate mode or a smaller print.'
+    : 'This toolpath is too detailed to display. Try a smaller print.');
   const { paths, rings, segments, caps } = sampled;
 
   const height = model.dimensions[2];
-  if (options.gravity && softness > 0) {
+  if (!vic && options.gravity && softness > 0) {
     applyGravity(paths, diameter, height, softness, accurate);
   }
 
-  const sides = Math.min(accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
+  const sides = Math.min(vic ? 16 : accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
   const positions = new Float32Array((rings * sides + caps) * 3);
   const indices = new Uint32Array((segments * 2 + caps) * sides * 3);
+  const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
+  const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
+  const cuts = [];
+  let nodeIndex = 0;
   // A rounded rectangle gives adjacent layers wider contact than a round tube.
   const profile = Array.from({ length: sides }, (_, index) => {
     const angle = index * tau / sides;
@@ -261,6 +276,7 @@ export function makeClayMesh(model, options) {
   const beadHeight = diameter * (0.44 - 0.08 * softness);
 
   for (const { points: path, edgeAreas, closed } of paths) {
+    const firstNode = nodeIndex;
     const startRing = vertex;
     let sideX = 1;
     let sideZ = 0;
@@ -293,13 +309,21 @@ export function makeClayMesh(model, options) {
         const width = across * loadedRadius;
         const top = vertical * loadedHeight;
         positions.set([x + sideX * width + upX * top, Math.max(0, centerHeight + upY * top), -y + sideZ * width + upZ * top], vertex * 3);
+        if (nodeIds) nodeIds[vertex] = nodeIndex;
         vertex++;
       }
+      nodeIndex++;
     }
     const joins = closed ? path.length : path.length - 1;
     for (let i = 0; i < joins; i++) {
       const ring = startRing + i * sides;
       const following = startRing + ((i + 1) % path.length) * sides;
+      const failure = analysis?.failure;
+      if (failure) {
+        const a = failure[firstNode + i];
+        const b = failure[firstNode + (i + 1) % path.length];
+        if (a !== b) cuts.push(face, Math.min(a || Infinity, b || Infinity));
+      }
       for (let j = 0; j < sides; j++) {
         const next = (j + 1) % sides;
         indices.set([ring + j, ring + next, following + j, ring + next, following + next, following + j], face);
@@ -311,6 +335,7 @@ export function makeClayMesh(model, options) {
     for (const [point, ring, reverse] of [[path[0], startRing, true], [path.at(-1), endRing, false]]) {
       const scale = point[4] ?? Math.sqrt((reverse ? edgeAreas?.[0] : edgeAreas?.at(-1)) ?? 1);
       positions.set([point[0], point[2] + beadHeight * scale / (point[5] ?? 1), -point[1]], vertex * 3);
+      if (nodeIds) nodeIds[vertex] = reverse ? firstNode : nodeIndex - 1;
       for (let j = 0; j < sides; j++) {
         const a = ring + j;
         const b = ring + (j + 1) % sides;
@@ -321,5 +346,10 @@ export function makeClayMesh(model, options) {
     }
   }
 
-  return { positions, indices };
+  if (analysis) {
+    analysis.nodeIds = nodeIds;
+    analysis.cuts = new Uint32Array(cuts);
+    analysis.stripLength = sides * 6;
+  }
+  return { positions, indices, analysis };
 }

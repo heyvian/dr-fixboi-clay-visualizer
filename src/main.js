@@ -4,16 +4,16 @@ import '@fontsource/dm-sans/latin-700.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-700.css';
 import './style.css';
-import { makeSample } from './sample.js';
+import { makeOverhangSample, makeSample } from './sample.js';
 import { createViewer } from './scene.js';
 import { setupRenderPanel } from './render-panel.js';
 import { loadSettings, saveSettings } from './settings.js';
+import { setupVicPanel } from './vic-panel.js';
 
 const byId = id => document.getElementById(id);
 const nozzle = byId('nozzle');
 const viscosity = byId('viscosity');
 const gravity = byId('gravity');
-const accurate = byId('quality-accurate');
 const fileInput = byId('file-input');
 const browse = byId('browse');
 const dropZone = byId('drop-zone');
@@ -35,7 +35,8 @@ document.querySelector('input[name="quality"][value="' + settings.quality + '"]'
 function updateSimulationSettings() {
   settings.viscosity = viscosity.valueAsNumber;
   settings.gravity = gravity.checked;
-  settings.quality = accurate.checked ? 'accurate' : 'fast';
+  settings.quality = document.querySelector('input[name="quality"]:checked').value;
+  byId('quality-note').hidden = settings.quality === 'vic';
   saveSettings(settings);
   schedulePreview();
 }
@@ -103,8 +104,10 @@ try {
 }
 
 const renderPanel = setupRenderPanel(viewer, settings);
+byId('quality-note').hidden = settings.quality === 'vic';
 
 if (viewer) {
+  const vicPanel = setupVicPanel(viewer);
   const worker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
   const sizeLimit = 25 * 1024 * 1024;
   let currentName;
@@ -123,7 +126,7 @@ if (viewer) {
   }
 
   function updateSceneStatus() {
-    sceneStatus.textContent = busy || loadingFile ? 'Building preview…'
+    sceneStatus.textContent = busy || loadingFile ? (settings.quality === 'vic' ? 'Computing VIC…' : 'Building preview…')
       : !currentName ? 'No preview' : gravity.checked ? 'Gravity on' : 'Gravity off';
   }
 
@@ -135,6 +138,7 @@ if (viewer) {
 
   function send(type, source) {
     busy = true;
+    vicPanel.begin(settings.quality === 'vic');
     updateSceneStatus();
     const { nozzle, viscosity, gravity, quality } = settings;
     worker.postMessage({
@@ -158,6 +162,7 @@ if (viewer) {
 
   schedulePreview = () => {
     pendingSettings = true;
+    vicPanel.begin(settings.quality === 'vic');
     clearTimeout(previewTimer);
     previewTimer = setTimeout(flush, 80);
   };
@@ -179,6 +184,7 @@ if (viewer) {
 
     if (data.error) {
       updateStatus(data.error, !isLoad);
+      if (settings.quality === 'vic') vicPanel.error();
       if (!currentName) byId('model-stats').textContent = 'Open a G-code file';
     } else {
       if (isLoad) {
@@ -192,6 +198,7 @@ if (viewer) {
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');
       showAlerts(data.alerts);
+      if (!pendingSettings && !loadingFile && (isLoad || !upcoming)) vicPanel.finish(data.mesh.analysis);
       cameraButtons.forEach(button => { button.disabled = false; });
     }
 
@@ -211,9 +218,9 @@ if (viewer) {
     updateSceneStatus();
   });
 
-  function loadSample() {
+  function loadExample(name, text) {
     if (loadingFile || upcoming) return;
-    upcoming = { name: sampleName, text: sample, sample: true };
+    upcoming = { name, text, sample: name === sampleName };
     updateStatus('');
     setFileBusy(true);
     flush();
@@ -246,7 +253,8 @@ if (viewer) {
     void loadFile(fileInput.files[0]);
     fileInput.value = '';
   });
-  restoreSample.addEventListener('click', loadSample);
+  restoreSample.addEventListener('click', () => loadExample(sampleName, sample));
+  byId('vic-sample').addEventListener('click', () => loadExample('vic-overhang.gcode', makeOverhangSample()));
 
   for (const eventName of ['dragenter', 'dragover', 'dragleave', 'drop']) {
     dropZone.addEventListener(eventName, event => {
@@ -264,7 +272,7 @@ if (viewer) {
   cameraButtons[2].addEventListener('click', viewer.reset);
   cameraButtons[3].addEventListener('click', viewer.frameStudio);
   cameraButtons.forEach(button => { button.disabled = true; });
-  loadSample();
+  loadExample(sampleName, sample);
 } else {
   browse.disabled = true;
 }

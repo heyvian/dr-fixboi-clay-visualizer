@@ -14,7 +14,7 @@ export function normalizeSettings(saved) {
     nozzle: numberOr(values.nozzle, 0.2, 30, defaultNozzle),
     viscosity: numberOr(values.viscosity, 0, 100, 65),
     gravity: values.gravity !== false,
-    quality: values.quality === 'accurate' ? 'accurate' : 'fast',
+    quality: ['accurate', 'vic'].includes(values.quality) ? values.quality : 'fast',
     body: Object.hasOwn(clayBodies, values.body) ? values.body : 'darkGranite',
     finish: values.finish === 'fired' ? 'fired' : 'greenware',
     rendering: values.rendering === true,

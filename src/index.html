@@ -59,6 +59,12 @@
             </div>
             <canvas id="axis-key" class="axis-key" width="144" height="124" aria-hidden="true"></canvas>
             <p class="scene-hint"><span>Drag to orbit</span><span>Scroll to zoom</span></p>
+            <div id="vic-player" class="vic-player" aria-label="VIC demonstration" hidden>
+              <p id="vic-stage"></p>
+              <button type="button" class="retro-button" id="vic-play">Play</button>
+              <input type="range" id="vic-progress" min="0" max="1000" value="0" aria-label="Demo progress">
+              <button type="button" class="retro-button" id="vic-return" aria-label="Return to hotspots">Map</button>
+            </div>
             <p id="scene-error" class="scene-error" hidden></p>
           </div>
           <div class="viewer-footer">
@@ -123,11 +129,31 @@
 
             <div class="setting quality-setting">
               <span id="quality-title" class="setting-label">Simulation quality</span>
-              <div id="quality" class="quality-choices" role="radiogroup" aria-labelledby="quality-title" aria-describedby="quality-note">
+              <div id="quality" class="quality-choices simulation-choices" role="radiogroup" aria-labelledby="quality-title" aria-describedby="quality-note">
                 <label><input type="radio" name="quality" value="fast" checked><span>Fast</span></label>
-                <label><input type="radio" name="quality" value="accurate" id="quality-accurate"><span>Accurate</span></label>
+                <label><input type="radio" name="quality" value="accurate"><span>Accurate</span></label>
+                <label><input type="radio" name="quality" value="vic" aria-describedby="vic-title"><span>VIC</span></label>
               </div>
               <p id="quality-note" class="setting-note">Accurate samples finer beads and models wet clay flow.</p>
+              <div id="vic-panel" class="vic-panel" hidden>
+                <h3 id="vic-title">VIC · Experimental</h3>
+                <p class="setting-note">Viscoplastic Instability &amp; Collapse</p>
+                <p id="vic-status" class="setting-note" role="status"></p>
+                <div id="vic-results" hidden>
+                  <div class="vic-legend" aria-label="Failure agreement legend">
+                    <span><i class="vic-hold"></i> Holds in all</span><span><i class="vic-mild"></i> 1–2 cases</span>
+                    <span><i class="vic-high"></i> 3–4 cases</span><span><i class="vic-severe"></i> 5–7 cases</span>
+                  </div>
+                  <p class="setting-note">Colors show agreement across seven model cases, with different assumed clay strengths and stiffnesses.</p>
+                  <ol id="vic-hotspots" class="vic-hotspots" aria-label="Highest-risk hotspots"></ol>
+                  <div class="vic-actions">
+                    <button type="button" class="retro-button" id="vic-map" aria-pressed="false">Hotspots</button>
+                    <button type="button" class="retro-button" id="vic-demo" aria-expanded="false" aria-controls="vic-player">Demonstrate</button>
+                  </div>
+                  <p class="setting-note" id="vic-case" hidden></p>
+                </div>
+                <button type="button" class="vic-sample" id="vic-sample">Load overhang sample</button>
+              </div>
             </div>
           </div>
         </aside>
@@ -193,7 +219,7 @@
       <div class="window-bar settings-bar"><h2 id="help-title">How to use the clay lab</h2></div>
       <div class="dialog-content">
         <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase. Look for Check G-code alerts, such as a first bead that starts too high.</p>
-        <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow with gravity on.</p>
+        <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. Experimental VIC highlights failure hotspots and demonstrates deposition, tearing, and collapse.</p>
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
         <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail. Use Studio view (↔ on small screens) to frame the vessel and the tools. Right-drag or drag with two fingers to pan around the studio.</p>

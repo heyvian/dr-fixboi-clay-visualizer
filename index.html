@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-DS1gVCxm.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-BycQU0QI.css">
+    <script type="module" crossorigin src="./pages-assets/index-BOIjhE9F.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-DkSy_cxp.css">
   </head>
   <body>
     <div class="top-bar">
@@ -61,6 +61,9 @@
             </div>
             <canvas id="axis-key" class="axis-key" width="144" height="124" aria-hidden="true"></canvas>
             <p class="scene-hint"><span>Drag to orbit</span><span>Scroll to zoom</span></p>
+            <div id="vic-loading" class="vic-loading" aria-hidden="true" hidden>
+              <span class="vic-spinner"></span><span>Computing VIC…</span>
+            </div>
             <div id="vic-player" class="vic-player" aria-label="VIC demonstration" hidden>
               <p id="vic-stage"></p>
               <button type="button" class="retro-button" id="vic-play">Play</button>

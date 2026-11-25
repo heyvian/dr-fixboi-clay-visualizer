@@ -20,6 +20,7 @@ const dropZone = byId('drop-zone');
 const restoreSample = byId('restore-sample');
 const status = byId('upload-status');
 const sceneStatus = byId('scene-status');
+const vicLoading = byId('vic-loading');
 const sceneError = byId('scene-error');
 const cameraButtons = ['zoom-in', 'zoom-out', 'reset-view', 'studio-view'].map(byId);
 const sampleName = 'sample-vase.gcode';
@@ -126,7 +127,10 @@ if (viewer) {
   }
 
   function updateSceneStatus() {
-    sceneStatus.textContent = busy || loadingFile ? (settings.quality === 'vic' ? 'Computing VIC…' : 'Building preview…')
+    const working = busy || loadingFile || upcoming || (pendingSettings && currentName);
+    const computingVic = working && settings.quality === 'vic';
+    vicLoading.hidden = !computingVic;
+    sceneStatus.textContent = working ? (computingVic ? 'Computing VIC…' : 'Building preview…')
       : !currentName ? 'No preview' : gravity.checked ? 'Gravity on' : 'Gravity off';
   }
 
@@ -163,6 +167,7 @@ if (viewer) {
   schedulePreview = () => {
     pendingSettings = true;
     vicPanel.begin(settings.quality === 'vic');
+    updateSceneStatus();
     clearTimeout(previewTimer);
     previewTimer = setTimeout(flush, 80);
   };
@@ -213,6 +218,9 @@ if (viewer) {
   worker.addEventListener('error', () => {
     busy = false;
     upcoming = undefined;
+    pendingSettings = false;
+    clearTimeout(previewTimer);
+    if (settings.quality === 'vic') vicPanel.error();
     setFileBusy(false);
     updateStatus('The preview could not start. Reload the page and try again.');
     updateSceneStatus();

@@ -243,6 +243,34 @@ a:hover { color: #291437; }
   pointer-events: none;
 }
 .scene-hint span + span::before { content: '·'; padding-right: .55rem; color: var(--pink); }
+.vic-loading {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .65rem .85rem;
+  border: 1px solid #a393bb;
+  box-shadow: 4px 4px 0 #190f29;
+  background: #231634;
+  color: #f8edff;
+  font: 700 .875rem var(--mono);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.vic-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #82719d;
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: vic-spin .8s steps(8, end) infinite;
+}
+@keyframes vic-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .vic-spinner { animation: none; } }
 .scene-error {
   position: absolute;
   left: 50%;

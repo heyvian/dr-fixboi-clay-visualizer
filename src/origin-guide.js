@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { formatRaisedHeight } from './gcode.js';
 
 const red = '#ff416d';
-const ink = '#6a1038';
 const ringGap = 8;
 const ringWidth = 10;
 const groundHeight = 0.08;
@@ -12,6 +11,11 @@ const artworkScale = 2;
 export const placementMarkShader = `
 uniform vec4 placementMark;
 uniform float raisedFootprint;
+uniform vec2 labelFacing;
+uniform vec4 originLabelBounds;
+uniform vec4 raisedLabelBounds;
+uniform sampler2D originGlyphs;
+uniform sampler2D raisedGlyphs;
 
 float placementMarkDistance(vec2 point) {
   float radial = length(point);
@@ -28,6 +32,24 @@ float placementMarkDistance(vec2 point) {
   float shaft = max(max(-${(ringWidth / 2).toFixed(1)} - along, along - reach * 0.64), across - reach * 0.22);
   float head = max(shoulder - along, max(along - reach, (across - (reach - along) * 0.86) * 0.76));
   return min(disk, min(ring, min(shaft, head)));
+}
+
+float labelCoverage(sampler2D glyphs, vec4 bounds, vec2 point) {
+  if (bounds.z <= 0.0) return 0.0;
+  vec2 offset = point - bounds.xy;
+  vec2 right = vec2(labelFacing.y, -labelFacing.x);
+  vec2 uv = 0.5 + vec2(dot(offset, right), -dot(offset, labelFacing)) / bounds.zw;
+  vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+  return texture2D(glyphs, uv).a * inside.x * inside.y;
+}
+
+float placementCoverage(vec2 point, float minFeather, float filterWidth) {
+  float edge = placementMarkDistance(point);
+  float feather = max(minFeather, fwidth(edge) * filterWidth);
+  float marks = 1.0 - smoothstep(-feather, feather, edge);
+  float origin = labelCoverage(originGlyphs, originLabelBounds, point);
+  float raised = labelCoverage(raisedGlyphs, raisedLabelBounds, point);
+  return max(marks, max(origin, raised));
 }
 `;
 
@@ -52,9 +74,7 @@ function createPreviewMark(uniforms) {
       uniform vec3 markColor;
       ${placementMarkShader}
       void main() {
-        float edge = placementMarkDistance(markPoint);
-        float feather = max(0.05, fwidth(edge) * 0.6);
-        gl_FragColor = vec4(markColor, 0.8 * (1.0 - smoothstep(-feather, feather, edge)));
+        gl_FragColor = vec4(markColor, 0.8 * placementCoverage(markPoint, 0.05, 0.6));
         #include <colorspace_fragment>
       }
     `,
@@ -84,7 +104,12 @@ export function getOriginPlacement(positions, origin) {
   return { radius: getFootprintRadius(positions), direction: origin.map(axis => axis / distance), distance };
 }
 
-function makeLabel(plane, lines) {
+function setLabel(label, lines) {
+  label.glyphs.value?.dispose();
+  label.glyphs.value = null;
+  label.bounds.value.set(0, 0, 0, 0);
+  if (!lines) return;
+
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d');
   const font = '900 20px system-ui, sans-serif';
@@ -98,23 +123,13 @@ function makeLabel(plane, lines) {
   context.font = font;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  context.fillStyle = red;
-  context.strokeStyle = ink;
-  context.lineWidth = 2.25;
-  context.lineJoin = 'round';
+  context.fillStyle = '#ffffff';
   lines.forEach((text, index) => {
     const y = (index + 0.5) * lineHeight + 2;
-    context.strokeText(text, width / 2, y);
     context.fillText(text, width / 2, y);
   });
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  const mesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({
-    map, transparent: true, depthWrite: false, toneMapped: false, fog: false,
-    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
-  }));
-  mesh.renderOrder = 6;
-  return { mesh, aspect: width / height };
+  label.glyphs.value = new THREE.CanvasTexture(canvas);
+  label.aspect = width / height;
 }
 
 function arrowReach(radius) {
@@ -126,38 +141,32 @@ export function createOriginGuide() {
   const uniforms = {
     placementMark: { value: new THREE.Vector4() },
     raisedFootprint: { value: 0 },
+    labelFacing: { value: new THREE.Vector2(0, 1) },
+    originLabelBounds: { value: new THREE.Vector4() },
+    raisedLabelBounds: { value: new THREE.Vector4() },
+    originGlyphs: { value: null },
+    raisedGlyphs: { value: null },
   };
   const previewMark = createPreviewMark(uniforms);
   group.add(previewMark);
   group.visible = false;
-  const labelPlane = new THREE.PlaneGeometry(1, 1);
+  const originLabel = { bounds: uniforms.originLabelBounds, glyphs: uniforms.originGlyphs };
+  const raisedLabel = { bounds: uniforms.raisedLabelBounds, glyphs: uniforms.raisedGlyphs };
+  const labels = [originLabel, raisedLabel];
   let placement;
   let footprintRadius = 0;
   let raisedHeight = 0;
-  let originLabel;
-  let raisedLabel;
 
   function setMesh(mesh, origin, height = 0) {
     placement = mesh && getOriginPlacement(mesh.positions, origin);
     footprintRadius = placement?.radius ?? (mesh && height ? getFootprintRadius(mesh.positions) : 0);
     raisedHeight = mesh ? height : 0;
-    for (const label of [originLabel, raisedLabel]) {
-      if (!label) continue;
-      label.mesh.removeFromParent();
-      label.mesh.material.map.dispose();
-      label.mesh.material.dispose();
-    }
-    originLabel = placement ? makeLabel(labelPlane, [Number(placement.distance.toFixed(2)) + ' mm', 'to X0 Y0']) : undefined;
-    raisedLabel = raisedHeight ? makeLabel(labelPlane, [formatRaisedHeight(raisedHeight), 'above Z0']) : undefined;
-    for (const label of [originLabel, raisedLabel]) {
-      if (label) group.add(label.mesh);
-    }
+    setLabel(originLabel, placement ? [Number(placement.distance.toFixed(2)) + ' mm to origin'] : undefined);
+    setLabel(raisedLabel, raisedHeight ? [formatRaisedHeight(raisedHeight), 'above Z0'] : undefined);
   }
 
   function layOutLabels(radius, directionX, directionZ) {
-    const yaw = Math.atan2(directionX, directionZ);
-    const frontX = Math.sin(yaw);
-    const frontZ = Math.cos(yaw);
+    const { x: frontX, y: frontZ } = uniforms.labelFacing.value.set(directionX, directionZ).normalize();
     const gap = Math.max(2, radius * 0.08);
     const outer = placement ? radius + ringGap + ringWidth : radius;
 
@@ -165,20 +174,14 @@ export function createOriginGuide() {
       return (width * Math.abs(x * frontZ - z * frontX) + depth * Math.abs(x * frontX + z * frontZ)) / 2;
     }
 
-    function place({ mesh }, width, depth, x, z) {
-      mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
-      mesh.position.set(x, groundHeight, z);
-      mesh.scale.set(width, depth, 1);
-    }
-
-    if (originLabel) {
-      const width = Math.max(26, radius * 1.53);
-      const depth = width / originLabel.aspect * 1.85;
+    if (placement) {
+      const width = Math.max(36, radius * 2.48);
+      const depth = width / originLabel.aspect * 2.3;
       const [x, z] = placement.direction;
       const anchor = outer + arrowReach(outer) + gap + halfSpan(width, depth, x, z);
-      place(originLabel, width, depth, x * anchor, z * anchor);
+      originLabel.bounds.value.set(x * anchor, z * anchor, width, depth);
     }
-    if (raisedLabel) {
+    if (raisedHeight) {
       const width = radius * 1.45;
       const depth = radius * 0.90;
       let x = frontX;
@@ -193,7 +196,7 @@ export function createOriginGuide() {
         }
       }
       const anchor = outer + gap + halfSpan(width, depth, x, z);
-      place(raisedLabel, width, depth, x * anchor, z * anchor);
+      raisedLabel.bounds.value.set(x * anchor, z * anchor, width, depth);
     }
   }
 
@@ -206,11 +209,14 @@ export function createOriginGuide() {
       return new THREE.Vector3(Math.cos(angle) * outer, groundHeight, Math.sin(angle) * outer);
     });
     layOutLabels(radius, direction.x, direction.z);
-    for (const label of [originLabel, raisedLabel]) {
-      if (!label) continue;
-      label.mesh.updateMatrix();
-      for (const x of [-0.5, 0.5]) {
-        for (const y of [-0.5, 0.5]) points.push(new THREE.Vector3(x, y, 0).applyMatrix4(label.mesh.matrix));
+    const { x: frontX, y: frontZ } = uniforms.labelFacing.value;
+    for (const { bounds } of labels) {
+      const { x, y: z, z: width, w: depth } = bounds.value;
+      if (!width) continue;
+      for (const u of [-width / 2, width / 2]) {
+        for (const v of [-depth / 2, depth / 2]) {
+          points.push(new THREE.Vector3(x + u * frontZ - v * frontX, groundHeight, z - u * frontX - v * frontZ));
+        }
       }
     }
     return points;
@@ -225,10 +231,17 @@ export function createOriginGuide() {
     if (!group.visible) return;
     previewMark.visible = !onCanvas;
     if (outer) uniforms.placementMark.value.set(outer, arrowReach(outer), ...placement.direction);
-    const size = 2 * (Math.max(radius, outer ? outer + arrowReach(outer) : 0) + 1);
-    previewMark.scale.set(size, size, 1);
     const view = camera.matrixWorld.elements;
     layOutLabels(radius, view[8], view[10]);
+    if (previewMark.visible) {
+      let extent = Math.max(radius, outer ? outer + arrowReach(outer) : 0);
+      for (const { bounds } of labels) {
+        const { x, y, z: width, w: depth } = bounds.value;
+        extent = Math.max(extent, Math.max(Math.abs(x), Math.abs(y)) + Math.hypot(width, depth) / 2);
+      }
+      const size = 2 * (extent + 1);
+      previewMark.scale.set(size, size, 1);
+    }
   }
 
   return { group, uniforms, setMesh, getFramePoints, update, get hasMark() { return Boolean(placement || raisedHeight); } };

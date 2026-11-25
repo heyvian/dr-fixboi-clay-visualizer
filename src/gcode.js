@@ -215,6 +215,14 @@ export function parseGcode(source) {
     extrusion: inferExtrusion ? undefined : extrusion, times: inferExtrusion ? inferredTimes : explicitTimes };
 }
 
+export function getRaisedHeight(model) {
+  return model.low[2] > 1e-6 ? model.low[2] : 0;
+}
+
+export function formatRaisedHeight(height) {
+  return Number(height.toPrecision(6)) + ' mm';
+}
+
 export function inspectToolpath(model, nozzle) {
   const alerts = [];
   const firstHeight = model.paths[0][0][2];
@@ -224,8 +232,6 @@ export function inspectToolpath(model, nozzle) {
 
   if (firstHeight - lowestHeight > tolerance) {
     alerts.push('The print starts at ' + height(firstHeight) + ' and later deposits at ' + height(lowestHeight) + '. Check the layer order.');
-  } else if (firstHeight > nozzle + tolerance) {
-    alerts.push('The first bead is at ' + height(firstHeight) + ', more than one nozzle diameter above Z0. Check the first layer and work offset.');
   }
   if (lowestHeight < -tolerance) {
     alerts.push('The toolpath deposits below Z0 at ' + height(lowestHeight) + '. Check the work offset.');
@@ -238,5 +244,5 @@ export function inspectToolpath(model, nozzle) {
   const placementOrigin = placementWarning ? [-centerX, centerY] : undefined;
   if (model.inferExtrusion) alerts.push('No extrusion commands found. Showing horizontal print moves.');
   if (model.skippedArcs) alerts.push('Some arcs could not be drawn. The preview supports valid XY arcs.');
-  return { alerts, placementWarning, placementOrigin };
+  return { alerts, placementWarning, placementOrigin, raisedHeight: getRaisedHeight(model) };
 }

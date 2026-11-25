@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { formatRaisedHeight } from './gcode.js';
 
 const red = '#ff416d';
 const ink = '#6a1038';
@@ -11,12 +12,15 @@ const artworkScale = 2;
 // The preview and studio canvas use the same mark in bed coordinates (millimeters).
 export const placementMarkShader = `
 uniform vec4 placementMark;
+uniform float raisedFootprint;
 
 float placementMarkDistance(vec2 point) {
+  float radial = length(point);
+  float disk = raisedFootprint > 0.0 ? radial - raisedFootprint : 1.0e9;
   float outer = placementMark.x;
+  if (outer <= 0.0) return disk;
   float reach = placementMark.y;
   vec2 direction = placementMark.zw;
-  float radial = length(point);
   float ring = max(radial - outer, outer - ${ringWidth.toFixed(1)} - radial);
 
   float along = dot(point, direction) - outer;
@@ -24,13 +28,13 @@ float placementMarkDistance(vec2 point) {
   float shoulder = reach * 0.42;
   float shaft = max(max(-${(ringWidth / 2).toFixed(1)} - along, along - reach * 0.64), across - reach * 0.22);
   float head = max(shoulder - along, max(along - reach, (across - (reach - along) * 0.86) * 0.76));
-  return min(ring, min(shaft, head));
+  return min(disk, min(ring, min(shaft, head)));
 }
 `;
 
-function createPreviewMark(mark) {
+function createPreviewMark(uniforms) {
   const material = new THREE.ShaderMaterial({
-    uniforms: { placementMark: mark, markColor: { value: new THREE.Color(red) } },
+    uniforms: { ...uniforms, markColor: { value: new THREE.Color(red) } },
     transparent: true,
     depthWrite: false,
     polygonOffset: true,
@@ -63,10 +67,7 @@ function createPreviewMark(mark) {
   return mesh;
 }
 
-export function getOriginPlacement(positions, origin) {
-  if (!origin?.every(Number.isFinite)) return;
-  const distance = Math.hypot(...origin);
-  if (!distance || !Number.isFinite(distance)) return;
+function getFootprintRadius(positions) {
   let radiusSquared = 0;
   // The print is centered on the XY bounds of its toolpath in the viewer.
   for (let index = 0; index < positions.length; index += 3) {
@@ -74,39 +75,45 @@ export function getOriginPlacement(positions, origin) {
     const z = positions[index + 2];
     radiusSquared = Math.max(radiusSquared, x * x + z * z);
   }
-  return {
-    radius: Math.sqrt(radiusSquared),
-    direction: origin.map(axis => axis / distance),
-    distance,
-  };
+  return Math.sqrt(radiusSquared);
 }
 
-const labelFont = '700 12px monospace';
+export function getOriginPlacement(positions, origin) {
+  if (!origin?.every(Number.isFinite)) return;
+  const distance = Math.hypot(...origin);
+  if (!distance || !Number.isFinite(distance)) return;
+  return { radius: getFootprintRadius(positions), direction: origin.map(axis => axis / distance), distance };
+}
 
-function makeLabel(text) {
-  const width = Math.ceil(text.length * 7.25) + 14;
-  const height = 22;
+function makeLabel(plane, lines) {
+  const width = Math.ceil(Math.max(...lines.map(text => text.length)) * 9.65) + 8;
+  const lineHeight = 19;
+  const height = lines.length * lineHeight + 4;
   const canvas = document.createElement('canvas');
   canvas.width = width * artworkScale;
   canvas.height = height * artworkScale;
   const context = canvas.getContext('2d');
   context.scale(artworkScale, artworkScale);
-  context.fillStyle = red;
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = ink;
-  context.fillRect(1, 1, width - 2, height - 2);
-  context.font = labelFont;
+  context.font = '700 16px monospace';
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   context.fillStyle = cream;
-  context.fillText(text, width / 2, height / 2 + 0.5);
+  context.strokeStyle = ink;
+  context.lineWidth = 2.75;
+  context.lineJoin = 'round';
+  lines.forEach((text, index) => {
+    const y = (index + 0.5) * lineHeight + 2;
+    context.strokeText(text, width / 2, y);
+    context.fillText(text, width / 2, y);
+  });
   const map = new THREE.CanvasTexture(canvas);
   map.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map, sizeAttenuation: false, depthWrite: false, toneMapped: false, fog: false,
+  const mesh = new THREE.Mesh(plane, new THREE.MeshBasicMaterial({
+    map, transparent: true, depthWrite: false, toneMapped: false, fog: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
   }));
-  sprite.renderOrder = 6;
-  return { sprite, width, height };
+  mesh.renderOrder = 6;
+  return { mesh, aspect: width / height };
 }
 
 function arrowReach(radius) {
@@ -115,75 +122,103 @@ function arrowReach(radius) {
 
 export function createOriginGuide() {
   const group = new THREE.Group();
-  const mark = { value: new THREE.Vector4(0, 0, 0, 0) };
-  const previewMark = createPreviewMark(mark);
+  const uniforms = {
+    placementMark: { value: new THREE.Vector4() },
+    raisedFootprint: { value: 0 },
+  };
+  const previewMark = createPreviewMark(uniforms);
   group.add(previewMark);
   group.visible = false;
-  const projected = new THREE.Vector3();
+  const labelPlane = new THREE.PlaneGeometry(1, 1);
   let placement;
-  let label;
-  let drawnScale;
+  let footprintRadius = 0;
+  let raisedHeight = 0;
+  let originLabel;
+  let raisedLabel;
 
-  function setMesh(mesh, origin) {
+  function setMesh(mesh, origin, height = 0) {
     placement = mesh && getOriginPlacement(mesh.positions, origin);
-    drawnScale = undefined;
-    if (label) {
-      label.sprite.removeFromParent();
-      label.sprite.material.map.dispose();
-      label.sprite.material.dispose();
-      label = undefined;
+    footprintRadius = placement?.radius ?? (mesh && height ? getFootprintRadius(mesh.positions) : 0);
+    raisedHeight = mesh ? height : 0;
+    for (const label of [originLabel, raisedLabel]) {
+      if (!label) continue;
+      label.mesh.removeFromParent();
+      label.mesh.material.map.dispose();
+      label.mesh.material.dispose();
     }
-    if (placement) {
-      const distance = Number(placement.distance.toFixed(2));
-      label = makeLabel(distance + ' mm to X0 Y0');
-      group.add(label.sprite);
+    originLabel = placement ? makeLabel(labelPlane, [Number(placement.distance.toFixed(2)) + ' mm', 'to X0 Y0']) : undefined;
+    raisedLabel = raisedHeight ? makeLabel(labelPlane, [formatRaisedHeight(raisedHeight), 'above Z0']) : undefined;
+    for (const label of [originLabel, raisedLabel]) {
+      if (label) group.add(label.mesh);
     }
   }
 
-  function getFramePoints(scale) {
-    if (!placement) return [];
-    const outer = placement.radius * scale + ringGap + ringWidth;
+  function layOutLabels(radius, directionX, directionY, directionZ) {
+    const yaw = Math.atan2(directionX, directionZ);
+    const frontX = Math.sin(yaw);
+    const frontZ = Math.cos(yaw);
+    const gap = Math.max(1, radius * 0.04);
+    const slope = directionY / Math.max(0.01, Math.hypot(directionX, directionZ));
+
+    function place({ mesh }, width, depth, x, z) {
+      mesh.rotation.set(-Math.PI / 2, yaw, 0, 'YXZ');
+      mesh.position.set(x, groundHeight + 0.10, z);
+      mesh.scale.set(width, depth, 1);
+    }
+
+    if (originLabel) {
+      const outer = radius + ringGap + ringWidth;
+      const width = Math.max(26, radius * 1.53);
+      const depth = width / originLabel.aspect * 1.85;
+      const [x, z] = placement.direction;
+      const halfSpan = (width * Math.abs(x * frontZ - z * frontX) + depth * Math.abs(x * frontX + z * frontZ)) / 2;
+      const anchor = outer + arrowReach(outer) + gap + halfSpan;
+      place(originLabel, width, depth, x * anchor, z * anchor);
+    }
+    if (raisedLabel) {
+      const width = radius * 1.45;
+      const depth = radius * 0.90;
+      // A low gap or steep camera angle can hide the disk under the clay. Move the
+      // lettering toward its front edge so it stays readable at either angle.
+      const clearOfClay = radius + depth / 2 + gap - raisedHeight / Math.max(0.04, slope);
+      const anchor = Math.max(radius * 0.35, clearOfClay);
+      place(raisedLabel, width, depth, frontX * anchor, frontZ * anchor);
+    }
+  }
+
+  function getFramePoints(scale, direction) {
+    if (!placement && !raisedHeight) return [];
+    const radius = footprintRadius * scale;
+    const outer = placement ? radius + ringGap + ringWidth : radius;
     const points = Array.from({ length: 24 }, (_, index) => {
       const angle = index / 24 * 2 * Math.PI;
       return new THREE.Vector3(Math.cos(angle) * outer, groundHeight, Math.sin(angle) * outer);
     });
-    const [x, z] = placement.direction;
-    const reach = outer + arrowReach(outer);
-    points.push(new THREE.Vector3(x * reach, groundHeight, z * reach));
+    layOutLabels(radius, direction.x, direction.y, direction.z);
+    for (const label of [originLabel, raisedLabel]) {
+      if (!label) continue;
+      label.mesh.updateMatrix();
+      for (const x of [-0.5, 0.5]) {
+        for (const y of [-0.5, 0.5]) points.push(new THREE.Vector3(x, y, 0).applyMatrix4(label.mesh.matrix));
+      }
+    }
     return points;
   }
 
-  function update(camera, width, height, scale, replaying, onCanvas) {
-    group.visible = Boolean(placement && !replaying && width && height);
-    // A zero radius also clears the mark on the canvas when nothing is visible.
-    if (!group.visible) {
-      mark.value.x = 0;
-      return;
-    }
+  function update(camera, scale, replaying, onCanvas) {
+    group.visible = Boolean((placement || raisedHeight) && !replaying);
+    const radius = footprintRadius * scale;
+    const outer = group.visible && placement ? radius + ringGap + ringWidth : 0;
+    uniforms.placementMark.value.x = 0;
+    uniforms.raisedFootprint.value = group.visible && raisedHeight ? radius : 0;
+    if (!group.visible) return;
     previewMark.visible = !onCanvas;
-    const outer = placement.radius * scale + ringGap + ringWidth;
-    const reach = arrowReach(outer);
-    const [x, z] = placement.direction;
-    mark.value.set(outer, reach, x, z);
-    if (drawnScale !== scale) {
-      const size = 2 * (outer + reach + 1);
-      previewMark.scale.set(size, size, 1);
-      const anchor = outer + reach * 0.78;
-      label.sprite.position.set(x * anchor, groundHeight + 0.15, z * anchor);
-      drawnScale = scale;
-    }
-
-    projected.copy(label.sprite.position).project(camera);
-    const screenX = (projected.x + 1) * width / 2;
-    const screenY = (1 - projected.y) * height / 2;
-    label.sprite.visible = projected.z >= -1 && projected.z <= 1
-      && screenX >= 8 && screenX <= width - 8 && screenY >= 34 && screenY <= height - 12;
-    if (!label.sprite.visible) return;
-    const labelX = THREE.MathUtils.clamp(screenX, label.width / 2 + 12, width - label.width / 2 - 12);
-    const unit = 2 / (height * camera.projectionMatrix.elements[5]);
-    label.sprite.center.set(0.5 + (screenX - labelX) / label.width, -0.56);
-    label.sprite.scale.set(label.width * unit, label.height * unit, 1);
+    if (outer) uniforms.placementMark.value.set(outer, arrowReach(outer), ...placement.direction);
+    const size = 2 * (Math.max(radius, outer ? outer + arrowReach(outer) : 0) + 1);
+    previewMark.scale.set(size, size, 1);
+    const view = camera.matrixWorld.elements;
+    layOutLabels(radius, view[8], view[9], view[10]);
   }
 
-  return { group, mark, setMesh, getFramePoints, update };
+  return { group, uniforms, setMesh, getFramePoints, update, get hasMark() { return Boolean(placement || raisedHeight); } };
 }

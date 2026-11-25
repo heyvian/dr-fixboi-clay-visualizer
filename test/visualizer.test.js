@@ -93,18 +93,29 @@ test('infers horizontal print moves for files without extrusion commands', () =>
 });
 
 test('G-code checks use the first deposited bead and flag out-of-order layers', () => {
-  const travelFirst = parseGcode('G0 Z35\nG0 Z2\nG1 X10 E1');
-  assert.deepEqual(inspectToolpath(travelFirst, 2.4).alerts, []);
+  const travelFirst = parseGcode('G0 Z35\nG0 Z0\nG1 X10 E1');
+  const seated = inspectToolpath(travelFirst, 2.4);
+  assert.deepEqual(seated.alerts, []);
+  assert.equal(seated.raisedHeight, 0);
   const printHighFirst = parseGcode('G0 Z8\nG1 X10 E1\nG0 Z1\nG1 X20 E2');
-  assert.match(inspectToolpath(printHighFirst, 2.4).alerts[0], /starts at Z 8 mm and later deposits at Z 1 mm/);
+  const outOfOrder = inspectToolpath(printHighFirst, 2.4);
+  assert.match(outOfOrder.alerts[0], /starts at Z 8 mm and later deposits at Z 1 mm/);
+  assert.equal(outOfOrder.raisedHeight, 1);
 });
 
-test('G-code checks flag an unusually high first bead and below-bed deposition', () => {
-  const high = parseGcode('G0 Z12\nG1 X10 E1');
+test('a positive minimum deposited Z warns and remains visible in every preview quality', () => {
+  const raised = parseGcode('G0 Z0\nG0 Z0.25\nG1 X10 E1');
+  assert.equal(inspectToolpath(raised, 4).raisedHeight, 0.25);
+  for (const quality of ['fast', 'accurate', 'vic']) {
+    const { positions } = makeClayMesh(raised, { quality, nozzle: 4, viscosity: 100, gravity: true });
+    let bottom = Infinity;
+    for (let i = 1; i < positions.length; i += 3) bottom = Math.min(bottom, positions[i]);
+    assert.equal(bottom, 0.25, quality);
+  }
   const below = parseGcode('G0 Z-1\nG1 X10 E1');
-  assert.match(inspectToolpath(high, 2.4).alerts[0], /first bead is at Z 12 mm/);
-  assert.deepEqual(inspectToolpath(high, 12).alerts, []);
-  assert.match(inspectToolpath(below, 2.4).alerts[0], /deposits below Z0/);
+  const belowBed = inspectToolpath(below, 2.4);
+  assert.equal(belowBed.raisedHeight, 0);
+  assert.match(belowBed.alerts[0], /deposits below Z0/);
 });
 
 test('warns when the deposited footprint is more than 50 mm from the XY origin', () => {
@@ -119,11 +130,12 @@ test('warns when the deposited footprint is more than 50 mm from the XY origin',
 
   assert.deepEqual(alertsFor(0, 0).alerts, []);
   assert.deepEqual(alertsFor(30, 39).alerts, []);
-  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined, placementOrigin: undefined });
+  assert.deepEqual(alertsFor(30, 40), { alerts: [], placementWarning: undefined, placementOrigin: undefined, raisedHeight: 1 });
   assert.deepEqual(alertsFor(-36, 48), {
     alerts: [],
     placementWarning: '60 mm off center from X0 Y0',
     placementOrigin: [36, 48],
+    raisedHeight: 1,
   });
 });
 

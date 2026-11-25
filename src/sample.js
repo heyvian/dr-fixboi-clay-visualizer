@@ -22,8 +22,8 @@ function radiusAt(height) {
 }
 
 export function makeSample() {
-  const lines = ['; Dr. FixBoi®’s sample vase', 'G21', 'G90', 'M83', 'G0 X0 Y0 Z1.0', 'G1 F1200'];
-  let previous = [0, 0, 1];
+  const lines = ['; Dr. FixBoi®’s sample vase', 'G21', 'G90', 'M83', 'G0 X0 Y0 Z0', 'G1 F1200'];
+  let previous = [0, 0, 0];
   const add = (radius, angle, height) => {
     const coordinates = [radius * Math.cos(angle), radius * Math.sin(angle), height].map(value => value.toFixed(3));
     const [x, y, z] = coordinates;
@@ -32,7 +32,7 @@ export function makeSample() {
     previous = coordinates.map(Number);
   };
   const seedSteps = 7 * 86;
-  for (let i = 1; i <= seedSteps; i++) add(18.5 * i / seedSteps, tau * i / 86, 1);
+  for (let i = 1; i <= seedSteps; i++) add(18.5 * i / seedSteps, tau * i / 86, 0);
   const pointsPerTurn = 144;
   const turns = 62;
   for (let i = 1; i <= turns * pointsPerTurn; i++) {
@@ -40,7 +40,7 @@ export function makeSample() {
     const angle = tau * i / pointsPerTurn;
     const fluting = (0.23 + 2.0 * Math.sin(Math.PI * height) ** 2) * Math.sin(11 * angle + height * 9);
     const ripple = 0.65 * Math.sin(angle * 3 - height * 4) * height;
-    add(radiusAt(height) + fluting + ripple, angle, 1 + 95 * height);
+    add(radiusAt(height) + fluting + ripple, angle, 95 * height);
   }
   lines.push('G0 Z110', 'M2', '');
   return lines.join('\n');
@@ -49,7 +49,7 @@ export function makeSample() {
 export function makeOverhangSample() {
   const lines = ['; VIC overhang sample', 'G21', 'G90', 'M83', 'G1 F1200'];
   for (let layer = 0; layer < 20; layer++) {
-    const height = 1 + layer * 2.5;
+    const height = layer * 2.5;
     const offset = Math.min(layer, 8) * 0.3 + Math.max(0, layer - 8) * 4.5;
     for (let i = 0; i <= 18; i++) {
       const along = i / 18 * 2 - 1;

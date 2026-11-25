@@ -4,6 +4,7 @@ import '@fontsource/dm-sans/latin-700.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-700.css';
 import './style.css';
+import { formatRaisedHeight } from './gcode.js';
 import { makeOverhangSample, makeSample } from './sample.js';
 import { createViewer } from './scene.js';
 import { setupRenderPanel } from './render-panel.js';
@@ -178,9 +179,11 @@ if (viewer) {
     previewTimer = setTimeout(flush, 80);
   };
 
-  function showChecks(alerts, placementWarning) {
-    scenePlacement.hidden = !placementWarning;
-    if (scenePlacementDetail.textContent !== (placementWarning ?? '')) scenePlacementDetail.textContent = placementWarning ?? '';
+  function showChecks(alerts, placementWarning, raisedHeight) {
+    const heightWarning = raisedHeight && formatRaisedHeight(raisedHeight) + ' above Z0';
+    const warning = [placementWarning, heightWarning].filter(Boolean).join(' · ');
+    scenePlacement.hidden = !warning;
+    if (scenePlacementDetail.textContent !== warning) scenePlacementDetail.textContent = warning;
     if (shownAlerts.length === alerts.length && shownAlerts.every((message, index) => message === alerts[index])) return;
     shownAlerts = alerts;
     byId('code-alert-content').hidden = !alerts.length;
@@ -193,7 +196,7 @@ if (viewer) {
 
   worker.addEventListener('message', ({ data }) => {
     if (data.type === 'checks') {
-      showChecks(data.alerts, data.placementWarning);
+      showChecks(data.alerts, data.placementWarning, data.raisedHeight);
       return;
     }
     busy = false;
@@ -211,7 +214,7 @@ if (viewer) {
         byId('file-name').title = currentName;
         restoreSample.hidden = currentIsSample;
       }
-      const dimensions = viewer.setMesh(data.mesh, isLoad, data.placementOrigin);
+      const dimensions = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');
       if (!pendingSettings && !loadingFile && (isLoad || !upcoming)) vicPanel.finish(data.mesh.analysis);

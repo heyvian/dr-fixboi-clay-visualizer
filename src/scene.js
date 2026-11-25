@@ -165,6 +165,7 @@ export function createViewer(container, axes, drafting) {
   const originGuide = createOriginGuide();
   let vicMode;
   let hasMesh = false;
+  let raisedHeight = 0;
   const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
     transparent: true, colorWrite: false,
   }));
@@ -195,7 +196,7 @@ export function createViewer(container, axes, drafting) {
       camera.updateMatrixWorld();
       const { clientWidth: width, clientHeight: height } = container;
       const showingVic = vicDisplay.mesh.visible;
-      originGuide.update(camera, width, height, comparing || showingVic ? 1 : clay.scale.x,
+      originGuide.update(camera, comparing || showingVic ? 1 : clay.scale.x,
         showingVic && vicMode === 'demo', studioFloor?.visible);
       renderer.render(scene, camera);
       drawAxes(axes, camera);
@@ -227,10 +228,13 @@ export function createViewer(container, axes, drafting) {
     const sphere = clay.geometry.boundingSphere;
     const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
     const horizontal = Math.atan(Math.tan(vertical) * camera.aspect);
-    const scale = comparing || vicDisplay.mesh.visible ? 1 : clay.scale.x;
+    const showPrinted = comparing || vicDisplay.mesh.visible;
+    const scale = showPrinted ? 1 : clay.scale.x;
     const center = sphere.center.clone().multiplyScalar(scale);
+    const lift = showPrinted ? 0 : clay.position.y;
+    center.y += lift;
     let radius = sphere.radius * scale;
-    const clearance = vicDisplay.mesh.visible ? Math.max(0, clay.geometry.boundingBox.min.y) / 2 : 0;
+    const clearance = Math.max(0, clay.geometry.boundingBox.min.y * scale + lift) / 2;
     center.y -= clearance;
     radius += clearance;
     if (vicMode === 'demo' && container.clientWidth < 480) {
@@ -238,8 +242,9 @@ export function createViewer(container, axes, drafting) {
       radius *= 1.06;
     }
     let distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
-    const direction = new THREE.Vector3(0.52, 0.4, 1).normalize();
-    const guidePoints = vicMode === 'demo' ? [] : originGuide.getFramePoints(scale);
+    const showGuide = vicMode !== 'demo' && originGuide.hasMark;
+    const direction = new THREE.Vector3(0.52, showGuide ? 0.63 : 0.4, 1).normalize();
+    const guidePoints = showGuide ? originGuide.getFramePoints(scale, direction) : [];
     if (guidePoints.length) {
       const right = new THREE.Vector3(0, 1, 0).cross(direction).normalize();
       const up = direction.clone().cross(right);
@@ -313,7 +318,7 @@ export function createViewer(container, axes, drafting) {
     event.preventDefault();
   });
 
-  function setMesh(mesh, fit, placementOrigin) {
+  function setMesh(mesh, fit, placementOrigin, height = 0) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(mesh.positions, 3));
     geometry.setIndex(new THREE.BufferAttribute(mesh.indices, 1));
@@ -334,7 +339,9 @@ export function createViewer(container, axes, drafting) {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     vicDisplay.setMesh(geometry, mesh.analysis);
-    originGuide.setMesh(mesh, placementOrigin);
+    raisedHeight = height;
+    clay.position.y = raisedHeight * (1 - clay.scale.x);
+    originGuide.setMesh(mesh, placementOrigin, raisedHeight);
     clay.geometry.dispose();
     clay.geometry = printedGhost.geometry = printedDepth.geometry = geometry;
     hasMesh = true;
@@ -367,6 +374,7 @@ export function createViewer(container, axes, drafting) {
     const layoutScale = comparing ? 1 : scale;
     studioBounds.min.multiplyScalar(layoutScale);
     studioBounds.max.multiplyScalar(layoutScale);
+    if (!comparing) studioBounds.translate(clay.position);
     studioProps.placeBeside(studioBounds, studioFloor.position.y, size.z * layoutScale);
     const shadowExtent = Math.max(extent, studioBounds.getSize(new THREE.Vector3()).length() / 2);
     const range = shadowExtent * 1.35;
@@ -390,6 +398,7 @@ export function createViewer(container, axes, drafting) {
   function setScale(scale) {
     if (clay.scale.x === scale) return;
     clay.scale.setScalar(scale);
+    clay.position.y = raisedHeight * (1 - scale);
     if (hasMesh) updateShadow(clay.geometry.boundingBox.getSize(new THREE.Vector3()));
     render();
   }
@@ -468,7 +477,7 @@ export function createViewer(container, axes, drafting) {
       const environment = pmrem.fromScene(room, high ? 0.025 : 0.04, 0.1, 100, { size: high ? 512 : 256 });
       pmrem.dispose();
       room.dispose();
-      studioTiers.set(high, { environment, clay: createClayMaterial(high), canvas: createCanvasMaterial(high, originGuide.mark) });
+      studioTiers.set(high, { environment, clay: createClayMaterial(high), canvas: createCanvasMaterial(high, originGuide.uniforms) });
     }
     return studioTiers.get(high);
   }

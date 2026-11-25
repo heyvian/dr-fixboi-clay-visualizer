@@ -100,7 +100,7 @@ canvasTone += 0.10 * abrasion.y - 0.11 * abrasion.x;
   canvasTone += 0.085 * fibers + 0.04 * yarnSlub;
 #endif
 diffuseColor.rgb *= canvasTone * (1.0 - pigment * vec3(0.05, 0.075, 0.10));
-if (placementMark.x > 0.0) {
+if (placementMark.x > 0.0 || raisedFootprint > 0.0) {
   // Pigment follows the yarns and lets the existing color variation and relief show through.
   float edge = placementMarkDistance(clothPoint + 0.42 * drift);
   float feather = max(0.35, fwidth(edge) * 0.65);
@@ -110,7 +110,7 @@ if (placementMark.x > 0.0) {
 }
 `;
 
-export function createCanvasMaterial(high, mark) {
+export function createCanvasMaterial(high, guideUniforms) {
   const material = new MeshPhysicalMaterial({
     color: '#a89b86',
     roughness: 0.94,
@@ -124,7 +124,7 @@ export function createCanvasMaterial(high, mark) {
 
   // Use world-space millimeters so every yarn can vary without a repeated texture tile.
   material.onBeforeCompile = shader => {
-    shader.uniforms.placementMark = mark;
+    Object.assign(shader.uniforms, guideUniforms);
     shader.vertexShader = `varying vec2 vCanvasPosition;\n` + shader.vertexShader.replace(
       '#include <begin_vertex>',
       '#include <begin_vertex>\nvCanvasPosition = (modelMatrix * vec4(position, 1.0)).xz;',

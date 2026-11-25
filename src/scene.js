@@ -161,6 +161,7 @@ export function createViewer(container, axes, drafting) {
   });
   const clay = new THREE.Mesh(new THREE.BufferGeometry(), previewMaterial);
   const vicDisplay = createVicDisplay();
+  let vicMode;
   let hasMesh = false;
   const printedDepth = new THREE.Mesh(clay.geometry, new THREE.MeshBasicMaterial({
     transparent: true, colorWrite: false,
@@ -225,6 +226,10 @@ export function createViewer(container, axes, drafting) {
     const clearance = vicDisplay.mesh.visible ? Math.max(0, clay.geometry.boundingBox.min.y) / 2 : 0;
     center.y -= clearance;
     radius += clearance;
+    if (vicMode === 'demo' && container.clientWidth < 480) {
+      center.y -= radius * 0.22;
+      radius *= 1.06;
+    }
     const distance = radius / Math.sin(Math.min(vertical, horizontal)) * 1.08;
     frame(center, new THREE.Vector3(0.52, 0.4, 1).normalize(), radius, distance);
   }
@@ -265,7 +270,7 @@ export function createViewer(container, axes, drafting) {
     drafting.width = Math.round(width * pixelRatio);
     drafting.height = Math.round(height * pixelRatio);
     if (studioFramed && oldAspect !== camera.aspect) frameStudio();
-    else if (Math.min(oldAspect, camera.aspect) < 1 && Math.abs(oldAspect - camera.aspect) > 0.1) reset();
+    else if ((vicMode === 'demo' || Math.min(oldAspect, camera.aspect) < 1) && Math.abs(oldAspect - camera.aspect) > 0.1) reset();
     render();
   }
 
@@ -404,6 +409,7 @@ export function createViewer(container, axes, drafting) {
 
   function setVicView(mode, progress = 0) {
     const wasVisible = vicDisplay.mesh.visible;
+    vicMode = mode;
     vicDisplay.show(mode, progress);
     if (wasVisible !== vicDisplay.mesh.visible) {
       updateMeshVisibility();
@@ -491,7 +497,8 @@ export function createViewer(container, axes, drafting) {
     }
   }
 
-  function setAppearance(finish, quality) {
+  function setAppearance(finish, quality, wetClayColor) {
+    vicDisplay.setColor(wetClayColor);
     const active = Boolean(finish);
     const high = active && quality === 'high';
     const studio = active ? getStudioTier(high) : undefined;

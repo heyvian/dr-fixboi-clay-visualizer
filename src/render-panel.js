@@ -68,7 +68,7 @@ export function setupRenderPanel(viewer, settings) {
     studioView.hidden = !rendering;
     viewport.classList.toggle('material-view', rendering);
     viewer?.setScale(fired ? scale : 1);
-    viewer?.setAppearance(rendering ? body[stage] : undefined, settings.renderQuality);
+    viewer?.setAppearance(rendering ? body[stage] : undefined, settings.renderQuality, body.greenware.color);
     viewer?.setComparison(comparing);
     updateDrafting();
     showMeasurements();

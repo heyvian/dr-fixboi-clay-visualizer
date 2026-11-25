@@ -4,6 +4,7 @@ import { simulateVic } from './vic.js';
 
 const maximumRings = 150_000;
 const maximumRingVertices = 1_800_000;
+const maximumVicRings = 28_000;
 const tau = Math.PI * 2;
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -100,7 +101,7 @@ function sampleRuns(model, origin, diameter, spacing, minStep, accurate, typical
     paths.push({ ...run, closed });
     rings += samples.length;
     segments += closed ? samples.length : samples.length - 1;
-    if (rings > (vic ? 18_000 : maximumRings)) return undefined;
+    if (rings > (vic ? maximumVicRings : maximumRings)) return undefined;
   }
   return { paths, rings, segments, caps };
 }
@@ -220,7 +221,8 @@ export function makeClayMesh(model, options) {
   const accurate = options.quality === 'accurate' || vic;
   const extent = Math.max(...model.dimensions, diameter);
   const origin = [(model.low[0] + model.high[0]) / 2, (model.low[1] + model.high[1]) / 2, model.low[2]];
-  if (vic) origin[2] = Math.min(0, origin[2]);
+  // A first layer within reach of the plate is seated at its surface in the replay.
+  if (vic && origin[2] > Math.max(0.22, diameter * 0.72)) origin[2] = 0;
   let length = 0;
   let points = 0;
   let totalExtrusion = 0;
@@ -237,7 +239,7 @@ export function makeClayMesh(model, options) {
       }
     }
   }
-  const step = vic ? Math.max(diameter * 0.45, length / 12_000)
+  const step = vic ? Math.max(diameter * 0.24, length / 22_000)
     : accurate ? Math.max(Math.min(diameter * 0.12, 0.9), length / 115_000)
     : Math.max(diameter * 0.7, extent / 200, length / 60_000);
   const minStep = points < 70_000 ? 0.001 : Math.max(0.001, step * 0.7);
@@ -258,10 +260,12 @@ export function makeClayMesh(model, options) {
     applyGravity(paths, diameter, height, softness, accurate);
   }
 
-  const sides = Math.min(vic ? 16 : accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
+  const sides = Math.min(vic ? 24 : accurate ? 32 : 12, 4 * Math.floor(maximumRingVertices / (4 * rings)));
   const positions = new Float32Array((rings * sides + caps) * 3);
   const indices = new Uint32Array((segments * 2 + caps) * sides * 3);
-  const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
+  const analysis = vic ? simulateVic(paths, {
+    diameter, stiffness: 1 - softness, gravity: options.gravity, bedOffset: Math.max(0, origin[2]),
+  }) : undefined;
   const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
   const cuts = [];
   let nodeIndex = 0;
@@ -322,7 +326,9 @@ export function makeClayMesh(model, options) {
       if (failure) {
         const a = failure[firstNode + i];
         const b = failure[firstNode + (i + 1) % path.length];
-        if (a !== b) cuts.push(face, Math.min(a || Infinity, b || Infinity));
+        const separation = a !== b ? Math.min(a || Infinity, b || Infinity) : Infinity;
+        const when = Math.min(separation, analysis.tears[firstNode + i] || Infinity);
+        if (Number.isFinite(when)) cuts.push(face, when);
       }
       for (let j = 0; j < sides; j++) {
         const next = (j + 1) % sides;
@@ -350,6 +356,7 @@ export function makeClayMesh(model, options) {
     analysis.nodeIds = nodeIds;
     analysis.cuts = new Uint32Array(cuts);
     analysis.stripLength = sides * 6;
+    analysis.diameter = diameter;
   }
   return { positions, indices, analysis };
 }

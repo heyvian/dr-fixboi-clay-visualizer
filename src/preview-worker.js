@@ -11,10 +11,10 @@ self.addEventListener('message', ({ data }) => {
     model = next;
     const transfers = [mesh.positions.buffer, mesh.indices.buffer];
     if (mesh.analysis) {
-      const { nodeIds, cuts, votes, trajectory, sections, centers } = mesh.analysis;
+      const { nodeIds, cuts, votes, trajectory, sections, centers, failure } = mesh.analysis;
       transfers.push(nodeIds.buffer, cuts.buffer, votes.buffer);
-      if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer);
-      delete mesh.analysis.failure;
+      if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer, failure.buffer);
+      delete mesh.analysis.tears;
     }
     self.postMessage({
       type,

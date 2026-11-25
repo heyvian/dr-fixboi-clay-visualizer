@@ -6,6 +6,7 @@ import { makeOverhangSample, makeSample } from '../src/sample.js';
 import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
+import { createVicContacts } from '../src/vic-contact.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -133,6 +134,8 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.ok(analysis.firstFailure > 1 && analysis.firstFailure < analysis.frames);
   assert.ok(analysis.held > 0.25 && analysis.held < 0.75);
   assert.equal(analysis.nodeIds.length, result.positions.length / 3);
+  assert.ok(analysis.frames >= 80 && analysis.votes.length >= 1200);
+  assert.equal(analysis.centers[1], 0);
   assert.equal(analysis.sections.length, analysis.frames * analysis.votes.length * 2);
   const lastFrame = analysis.trajectory.subarray((analysis.frames - 1) * analysis.votes.length * 4);
   let landed = false;
@@ -149,6 +152,25 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.equal(gravityOff.trajectory, undefined);
   assert.equal(gravityOff.votes.some(Boolean), false);
   assert.equal(normalizeSettings({ quality: 'vic' }).quality, 'vic');
+});
+
+test('VIC debris stacks on other falling clay and slides sideways against a wall', () => {
+  const nodes = [0, 1].map(run => ({ run, length: 0, width: 4, height: 3, volume: 10 }));
+  const position = new Float32Array([0, 0, 0, 0.4, 0, -0.25]);
+  const previousZ = new Float32Array([0, 3.5]);
+  const velocity = new Float32Array([0, 0, 0, 0, 0, -360]);
+  const contacts = createVicContacts(nodes, 4, position, previousZ, velocity);
+  contacts.rebuild(2, [5, 5], [10, 10], [0, 0]);
+  assert.equal(contacts.settle(1), 360);
+  assert.ok(position[5] > 2);
+  assert.equal(velocity[5], 0);
+
+  position.set([2, 0, 0.6], 3);
+  previousZ[1] = 0.6;
+  contacts.rebuild(2, [0, 5], [10, 10], [0, 0]);
+  contacts.settle(1);
+  assert.ok(position[3] > 2.2);
+  assert.ok(Math.abs(position[5] - 0.6) < 0.00001);
 });
 
 function meshSize({ positions, indices }) {

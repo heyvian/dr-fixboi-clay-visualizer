@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-Bsdfa__T.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-uhdCpjEE.css">
+    <script type="module" crossorigin src="./pages-assets/index--jSrIc5V.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-CuQWjLi5.css">
   </head>
   <body>
     <div class="top-bar">
@@ -227,6 +227,37 @@
         </div>
       </section>
 
+      <section class="window fawn-window" aria-labelledby="fawn-title">
+        <div class="window-bar fawn-bar">
+          <h2 id="fawn-title">FAWN</h2>
+          <span>Form Archive for Workshop Needs</span>
+        </div>
+        <form id="fawn-form" class="render-body fawn-body">
+          <fieldset>
+            <legend class="setting-label">Clay stage</legend>
+            <div class="quality-choices">
+              <label><input type="radio" name="fawnStage" value="pre-fired" checked><span>Pre-fired</span></label>
+              <label><input type="radio" name="fawnStage" value="fired"><span>Fired</span></label>
+            </div>
+            <p class="setting-note">Fired uses the selected clay body’s shrinkage.</p>
+          </fieldset>
+          <fieldset aria-describedby="fawn-format-note">
+            <legend class="setting-label">File format</legend>
+            <div class="quality-choices">
+              <label><input type="radio" name="fawnFormat" value="stl" checked><span>STL</span></label>
+              <label><input type="radio" name="fawnFormat" value="step"><span>STEP</span></label>
+            </div>
+            <p id="fawn-format-note" class="setting-note"></p>
+          </fieldset>
+          <div class="fawn-download">
+            <span class="setting-label">Export size</span>
+            <p id="fawn-dimensions">Load a model to export.</p>
+            <button type="submit" id="fawn-download" class="retro-button" disabled>Download STL</button>
+            <p id="fawn-status" role="status"></p>
+          </div>
+        </form>
+      </section>
+
       <footer class="page-footer">
         <span><span class="footer-star" aria-hidden="true">✦</span> Your G-code stays on this device.</span>
         <span>Simulation is approximate.</span>
@@ -243,6 +274,7 @@
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
         <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail.</p>
+        <p><strong>Export with FAWN.</strong> Choose Pre-fired for the as-printed size or Fired to apply the selected clay body’s shrinkage. Download the complete form as STL for slicing or as faceted STEP for compatible CAD apps. The file uses millimeters, with the model’s base at Z0.</p>
         <p>Your G-code stays on this device, and your browser remembers your settings.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
       </div>
@@ -253,7 +285,7 @@
       <div class="dialog-content">
         <h3>Libraries and type</h3>
         <ul>
-          <li>Three.js and its add-ons power the WebGL preview, orbit controls, and studio rendering. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
+          <li>Three.js and its add-ons power the WebGL preview, orbit controls, studio rendering, and STL export. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
           <li>Vite builds the site and bundles the simulation worker. <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> · <a href="https://github.com/vitejs/vite/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">MIT license</a></li>
           <li>Fontsource packages Archivo Black by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. <a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> · SIL Open Font License 1.1 for <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/archivo-black.txt">Archivo Black</a>, <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/dm-sans.txt">DM Sans</a>, and <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/ibm-plex-mono.txt">IBM Plex Mono</a></li>
         </ul>

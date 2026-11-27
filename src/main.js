@@ -5,6 +5,7 @@ import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-700.css';
 import './style.css';
 import { formatRaisedHeight } from './gcode.js';
+import { setupFawnPanel } from './fawn-panel.js';
 import { makeOverhangSample, makeSample } from './sample.js';
 import { createViewer } from './scene.js';
 import { setupRenderPanel } from './render-panel.js';
@@ -109,6 +110,7 @@ try {
 }
 
 const renderPanel = setupRenderPanel(viewer, settings);
+const fawnPanel = setupFawnPanel(settings);
 byId('quality-note').hidden = settings.quality === 'vic';
 
 if (viewer) {
@@ -134,6 +136,7 @@ if (viewer) {
   function updateSceneStatus() {
     const working = busy || loadingFile || upcoming || (pendingSettings && currentName);
     toolpathPanel.setBusy(Boolean(working));
+    fawnPanel.setBusy(Boolean(working));
     const computingVic = working && settings.quality === 'vic';
     vicLoading.hidden = !computingVic;
     sceneStatus.textContent = working ? (computingVic ? 'Computing VIC…' : 'Building preview…')
@@ -218,6 +221,7 @@ if (viewer) {
         restoreSample.hidden = currentIsSample;
       }
       const { dimensions, raisedHeight } = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight, data.motion);
+      fawnPanel.setMesh(data.mesh, currentName, dimensions);
       toolpathPanel.setDuration(data.mesh.replay?.duration);
       showChecks(data.alerts, data.placementWarning, raisedHeight);
       renderPanel.setMeasurements(dimensions);

@@ -593,7 +593,7 @@ a:hover { color: #291437; }
 :is(.vic-view, .toolpath-view) #comparison-key { display: none !important; }
 .quality-choices input:focus-visible + span { position: relative; z-index: 1; outline: 3px solid var(--purple); outline-offset: 2px; }
 
-.render-window { margin-top: 1.3rem; }
+.render-window, .fawn-window { margin-top: 1.3rem; }
 .render-bar { background: var(--pink); }
 .render-body {
   display: grid;
@@ -648,6 +648,13 @@ a:hover { color: #291437; }
 .size-comparison tbody { border-block: 1px solid #d8c9e3; }
 .size-comparison tr.current-stage { background: #f0e6fb; }
 .size-overlay { width: fit-content; margin-top: .55rem; }
+.fawn-bar { background: var(--lavender); flex-wrap: wrap; gap: .35rem 1rem; }
+.fawn-bar span { font: 500 .75rem var(--mono); }
+.fawn-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.fawn-body legend { padding: 0; }
+.fawn-download p { margin: .52rem 0; font: 500 .82rem var(--mono); }
+.fawn-download #fawn-status { color: #614872; margin-bottom: 0; }
+.fawn-download #fawn-status:empty { margin: 0; }
 
 .page-footer {
   display: flex;

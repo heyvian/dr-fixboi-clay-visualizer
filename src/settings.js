@@ -21,6 +21,8 @@ export function normalizeSettings(saved) {
     renderQuality: values.renderQuality === 'high' ? 'high' : 'low',
     drafting: values.drafting === true,
     comparing: values.comparing === true,
+    fawnStage: values.fawnStage === 'fired' ? 'fired' : 'pre-fired',
+    fawnFormat: values.fawnFormat === 'step' ? 'step' : 'stl',
   };
 }
 

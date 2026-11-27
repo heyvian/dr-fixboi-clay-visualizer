@@ -9,6 +9,7 @@ import { solveBeadFlow } from '../src/bead-flow.js';
 import { createVicContacts } from '../src/vic-contact.js';
 import { getOriginPlacement } from '../src/origin-guide.js';
 import { depositedIndexCount, nozzlePosition } from '../src/toolpath.js';
+import { exportClayModel } from '../src/fawn-export.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -385,6 +386,21 @@ test('fired dimensions compound drying and firing shrinkage', () => {
   assert.ok(Math.abs(firedScale(clayBodies.polarIce) - 0.84976) < 0.000001);
 });
 
+test('FAWN exports indexed clay in millimeters, Z-up, and scaled for firing', async () => {
+  const positions = new Float32Array([1, 15, 2, 3, 15, 2, 1, 19, 2, 1, 15, 5]);
+  const indices = new Uint32Array([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+  const stl = await exportClayModel({ positions, indices, format: 'stl', scale: 1 }).arrayBuffer();
+  const data = new DataView(stl);
+  assert.equal(stl.byteLength, 84 + 4 * 50);
+  assert.equal(data.getUint32(80, true), 4);
+  assert.deepEqual(Array.from({ length: 9 }, (_, axis) => data.getFloat32(96 + 4 * axis, true)),
+    [1, -2, 0, 1, -2, 4, 3, -2, 0]);
+  const step = await exportClayModel({ positions, indices, format: 'step', scale: 0.5 }).text();
+  assert.match(step, /SI_UNIT\(\.MILLI\.,\.METRE\.\)/);
+  assert.match(step, /COORDINATES_LIST\('',4,\(\n\(0\.5,-1\.,0\.\),\n\(1\.5,-1\.,0\.\),\n\(0\.5,-1\.,2\.\)/);
+  assert.match(step, /TRIANGULATED_SURFACE_SET\('',#16,4,\(\),\(\),\(\n\(1,3,2\)/);
+});
+
 test('PSH Dark Granite uses the published total cone 6 shrinkage', () => {
   assert.equal(firedScale(clayBodies.darkGranite), 0.875);
 });
@@ -396,9 +412,12 @@ test('restores saved controls and uses Fast for a first visit', () => {
   assert.equal(settings.body, 'darkGranite');
   assert.equal(settings.finish, 'greenware');
   assert.equal(settings.renderQuality, 'low');
+  assert.equal(settings.fawnStage, 'pre-fired');
+  assert.equal(settings.fawnFormat, 'stl');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
     body: 'm390', finish: 'fired', rendering: true, renderQuality: 'high', drafting: true, comparing: true,
+    fawnStage: 'fired', fawnFormat: 'step',
   };
   assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(saved))), saved);
   assert.deepEqual(normalizeSettings({ nozzle: 70, quality: 'other', body: '__proto__' }), settings);

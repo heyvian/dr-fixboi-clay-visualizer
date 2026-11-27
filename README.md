@@ -10,6 +10,7 @@ Preview clay 3D prints from G-code in a ’90s-inspired browser lab. [Open the l
 - **Adjust deposition.** The default nozzle is 4 mm. The viscosity slider is a relative runny-to-stiff scale for tuning bead shape and mobility based on how your clay prints. The gravity switch enables or disables sag and compression. **Fast**, the default, estimates gravity effects from nearby support and unsupported span length. **Accurate** uses finer deposition samples, extrusion amounts where available, contact with earlier beads, lateral spreading, and yield-stress flow along the bead. **VIC** adds experimental failure analysis and a replay.
 - **Measure and compare firing.** **Dimensions** labels length, width, and height in the viewport. Choose a clay body to compare estimated greenware and unglazed cone 6 oxidation finishes. The size table compares printed and fired measurements. **Shrinkage overlay** shows a ghost of the as-printed vessel around the fired model and labels both sets of dimensions.
 - **Render the finish.** **Render** adds textured clay and a canvas work surface with a sponge, double-ended trimming tool, and 30 cm ruler at real-world scale. High render quality adds sampled softbox shadows, accent lights from varied angles, and finer color, roughness, and normal detail. Render quality is independent of simulation quality.
+- **Export with FAWN.** The **Form Archive for Workshop Needs** exports the complete generated mesh as binary STL or tessellated STEP (AP242). Choose **Pre-fired** for as-printed dimensions or **Fired** to apply the selected clay body’s shrinkage. Both formats use millimeters with the base at `Z0`. The export preserves the simulated bead geometry, so slicers may need to merge intersecting bead volumes.
 - **Keep files and settings local.** A browser worker reads and simulates G-code on your device. The browser remembers settings locally. The preview requires WebGL 2.
 
 ## VIC · Experimental
@@ -27,7 +28,7 @@ PSH Dark Granite is the default and uses PSH’s published 12.5% total cone 6 sh
 
 ## Libraries and type credits
 
-- Three.js and its add-ons power the WebGL scene, orbit controls, lighting, materials, and geometry utilities. [Three.js](https://threejs.org/) · [MIT license](pages-assets/licenses/three.txt)
+- Three.js and its add-ons power the WebGL scene, orbit controls, lighting, materials, and STL export. [Three.js](https://threejs.org/) · [MIT license](pages-assets/licenses/three.txt)
 - Vite builds the static site and bundles the simulation worker. [Vite](https://vite.dev/) · [MIT license](https://github.com/vitejs/vite/blob/main/LICENSE.md)
 - Fontsource packages the fonts for local serving. Archivo Black is by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. [Fontsource](https://fontsource.org/) · SIL Open Font License 1.1 for [Archivo Black](pages-assets/licenses/archivo-black.txt), [DM Sans](pages-assets/licenses/dm-sans.txt), and [IBM Plex Mono](pages-assets/licenses/ibm-plex-mono.txt)
 - GitHub Pages hosts the app and GitHub Actions checks that the published files match the source build. See the lockfile for the full dependency inventory. [Pages workflow](.github/workflows/pages.yml) · [Package lockfile](package-lock.json)

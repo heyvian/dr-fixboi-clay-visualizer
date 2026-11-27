@@ -1,6 +1,6 @@
 {
   "name": "dr-fixboi-clay-visualizer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Browser-based G-code preview for clay 3D printing.",
   "scripts": {
     "test": "node --test",

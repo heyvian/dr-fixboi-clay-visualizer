@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-CmTRwcIi.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-B38gX6MS.css">
+    <script type="module" crossorigin src="./pages-assets/index-B4JjDQEt.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-DOqCLNjl.css">
   </head>
   <body>
     <div class="top-bar">
@@ -292,17 +292,22 @@
     </dialog>
 
     <dialog id="credits-dialog" class="window info-dialog" aria-labelledby="credits-title">
-      <div class="window-bar settings-bar"><h2 id="credits-title">Credits</h2></div>
+      <div class="window-bar settings-bar">
+        <h2 id="credits-title">Credits</h2>
+        <span id="credits-version" class="credits-version"></span>
+      </div>
       <div class="dialog-content">
         <h3>Libraries and type</h3>
         <ul>
-          <li>Three.js and its add-ons power the WebGL preview, orbit controls, studio rendering, and STL export. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
-          <li>fflate packages the OBJ and its textures into a ZIP. <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener noreferrer">fflate</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/fflate.txt">MIT license</a></li>
-          <li>Vite builds the site and bundles the simulation worker. <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> · <a href="https://github.com/vitejs/vite/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">MIT license</a></li>
+          <li>Three.js and its add-ons power the WebGL preview, orbit controls, studio rendering, mesh geometry, and STL export. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
+          <li>fflate by Arjun Barrett compresses FAWN’s PNG textures and packages textured OBJ exports. <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener noreferrer">fflate</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/fflate.txt">MIT license</a></li>
+          <li>Vite builds the site and bundles its simulation and export workers. <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> · <a href="https://github.com/vitejs/vite/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">MIT license</a></li>
           <li>Fontsource packages Archivo Black by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. <a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> · SIL Open Font License 1.1 for <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/archivo-black.txt">Archivo Black</a>, <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/dm-sans.txt">DM Sans</a>, and <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/ibm-plex-mono.txt">IBM Plex Mono</a></li>
+          <li>GitHub Pages hosts the app. GitHub Actions checks the release build. <a href="https://pages.github.com/" target="_blank" rel="noopener noreferrer">GitHub Pages</a> · <a href="https://github.com/heyvian/dr-fixboi-clay-visualizer/blob/main/.github/workflows/pages.yml" target="_blank" rel="noopener noreferrer">Build workflow</a></li>
         </ul>
         <h3>Clay and simulation references</h3>
-        <p>Clay presets use published shrinkage data. The project README links to the clay rheology and printability research behind VIC. <a href="https://psh.ca/products/20kg-psh-dark-granite-clay-cone-6" target="_blank" rel="noopener noreferrer">Pottery Supply House</a> · <a href="https://www.plainsmanclays.com/" target="_blank" rel="noopener noreferrer">Plainsman Clays</a> · <a href="https://github.com/heyvian/dr-fixboi-clay-visualizer#vic--experimental" target="_blank" rel="noopener noreferrer">VIC research references</a></p>
+        <p>Clay presets use published shrinkage data from Pottery Supply House and Plainsman Clays. <a href="https://psh.ca/products/20kg-psh-dark-granite-clay-cone-6" target="_blank" rel="noopener noreferrer">PSH Dark Granite</a> · <a href="https://www.plainsmanclays.com/" target="_blank" rel="noopener noreferrer">Plainsman Clays</a> · <a href="https://github.com/heyvian/dr-fixboi-clay-visualizer#clay-presets-and-shrinkage-sources" target="_blank" rel="noopener noreferrer">Clay body data</a></p>
+        <p>VIC draws on clay printability experiments, research on how soft strands stretch and break, and WASP’s workshop guidance. <a href="https://doi.org/10.1016/j.addma.2020.101335" target="_blank" rel="noopener noreferrer">Clay printability</a> · <a href="https://doi.org/10.1039/D3SM00143A" target="_blank" rel="noopener noreferrer">Filament stretching</a> · <a href="https://www.3dwasp.com/en/faq/how-to-tell-that-clay-is-ready-to-be-used-for-printing/" target="_blank" rel="noopener noreferrer">WASP</a> · <a href="https://github.com/heyvian/dr-fixboi-clay-visualizer#vic--experimental" target="_blank" rel="noopener noreferrer">VIC references</a></p>
         <p class="project-credit">Made by Vian Esterhuizen, who supplied the concept, feature ideas, and design direction. OpenAI Codex in ChatGPT implemented Vian’s specifications.</p>
         <form method="dialog"><button type="submit" class="retro-button">Close</button></form>
       </div>

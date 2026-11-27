@@ -31,9 +31,9 @@ PSH Dark Granite is the default and uses PSH’s published 12.5% total cone 6 sh
 
 ## Libraries and type credits
 
-- Three.js and its add-ons power the WebGL scene, orbit controls, lighting, materials, and STL export. [Three.js](https://threejs.org/) · [MIT license](pages-assets/licenses/three.txt)
-- fflate ships with Three.js and packages OBJ exports into a ZIP. [fflate](https://github.com/101arrowz/fflate) · [MIT license](pages-assets/licenses/fflate.txt)
-- Vite builds the static site and bundles the simulation worker. [Vite](https://vite.dev/) · [MIT license](https://github.com/vitejs/vite/blob/main/LICENSE.md)
+- Three.js and its add-ons power the WebGL scene, orbit controls, studio rendering, mesh geometry, and STL export. [Three.js](https://threejs.org/) · [MIT license](pages-assets/licenses/three.txt)
+- fflate by Arjun Barrett ships with Three.js. It compresses FAWN’s PNG textures and packages textured OBJ exports. [fflate](https://github.com/101arrowz/fflate) · [MIT license](pages-assets/licenses/fflate.txt)
+- Vite builds the static site and bundles the simulation and export workers. [Vite](https://vite.dev/) · [MIT license](https://github.com/vitejs/vite/blob/main/LICENSE.md)
 - Fontsource packages the fonts for local serving. Archivo Black is by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. [Fontsource](https://fontsource.org/) · SIL Open Font License 1.1 for [Archivo Black](pages-assets/licenses/archivo-black.txt), [DM Sans](pages-assets/licenses/dm-sans.txt), and [IBM Plex Mono](pages-assets/licenses/ibm-plex-mono.txt)
 - GitHub Pages hosts the app and GitHub Actions checks that the published files match the source build. See the lockfile for the full dependency inventory. [Pages workflow](.github/workflows/pages.yml) · [Package lockfile](package-lock.json)
 

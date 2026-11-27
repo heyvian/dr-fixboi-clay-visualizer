@@ -4,6 +4,7 @@ import '@fontsource/dm-sans/latin-700.css';
 import '@fontsource/ibm-plex-mono/latin-500.css';
 import '@fontsource/ibm-plex-mono/latin-700.css';
 import './style.css';
+import { version } from '../package.json';
 import { formatRaisedHeight } from './gcode.js';
 import { setupFawnPanel } from './fawn-panel.js';
 import { makeOverhangSample, makeSample } from './sample.js';
@@ -14,6 +15,7 @@ import { setupToolpathPanel } from './toolpath-panel.js';
 import { setupVicPanel } from './vic-panel.js';
 
 const byId = id => document.getElementById(id);
+byId('credits-version').textContent = 'Version ' + version;
 const nozzle = byId('nozzle');
 const viscosity = byId('viscosity');
 const gravity = byId('gravity');

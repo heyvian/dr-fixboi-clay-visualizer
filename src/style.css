@@ -679,6 +679,7 @@ a:hover { color: #291437; }
 .dialog-content ul { margin: 0; padding-left: 1.25rem; }
 .dialog-content form { margin-top: 1.25rem; }
 .dialog-content .project-credit { color: #553b69; font-size: .8rem; }
+.credits-version { font: 700 .75rem/1 var(--mono); white-space: nowrap; }
 
 @media (max-width: 60rem) {
   .shell { width: calc(100% - 2.75rem); }

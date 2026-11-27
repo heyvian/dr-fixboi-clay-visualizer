@@ -21,7 +21,7 @@ self.addEventListener('message', ({ data }) => {
       delete mesh.analysis.tears;
     }
     const motion = type === 'load' ? next.motionPoints : undefined;
-    self.postMessage({ type, mesh, alerts, placementWarning, placementOrigin, raisedHeight, motion }, transfers);
+    self.postMessage({ type, quality: settings.quality, mesh, alerts, placementWarning, placementOrigin, raisedHeight, motion }, transfers);
   } catch (error) {
     self.postMessage({ type, error: error.message });
   }

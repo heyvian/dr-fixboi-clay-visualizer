@@ -1,7 +1,7 @@
 import { vicCauses } from './vic.js';
 import { formatLength } from './dimensions.js';
 
-export function setupVicPanel(viewer, onOpen) {
+export function setupVicPanel(viewer, { closeToolpath, onPlaybackChange }) {
   const byId = id => document.getElementById(id);
   const panel = byId('vic-panel');
   const status = byId('vic-status');
@@ -18,6 +18,7 @@ export function setupVicPanel(viewer, onOpen) {
   const viewport = byId('viewport');
   let analysis;
   let mode;
+  let beforeDemo;
   let progress = 0;
   let animation = 0;
   let start = 0;
@@ -36,9 +37,10 @@ export function setupVicPanel(viewer, onOpen) {
     const fails = analysis.firstFailure < analysis.frames;
     const loss = frame >= analysis.firstFailure;
     const printed = Math.min(99, Math.floor(100 * analysis.deposited / analysis.votes.length));
-    const label = loss && analysis.stopped ? (progress >= 1 ? 'Settled' : 'Print stopped · settling') + ' · ' + printed + '% deposited'
+    const state = loss && analysis.stopped ? (progress >= 1 ? 'Settled' : 'Print stopped · settling') + ' · ' + printed + '% deposited'
       : progress >= 1 ? (fails ? 'After collapse' : analysis.failed ? 'Complete · local tears' : 'Complete · bead sections held')
         : loss ? 'Settling after failure' : frame >= analysis.buildFrames ? 'Checking the completed print' : 'Depositing';
+    const label = 'VIC · ' + state;
     if (stage.textContent !== label) stage.textContent = label;
     slider.setAttribute('aria-valuetext', Math.round(100 * progress) + '% · ' + label);
     viewer.setVicView('demo', progress);
@@ -58,17 +60,19 @@ export function setupVicPanel(viewer, onOpen) {
   }
 
   function show(view) {
-    if (view) onOpen();
+    if (view) closeToolpath();
     pause();
     mode = view;
+    const playing = view === 'demo';
     map.setAttribute('aria-pressed', String(view === 'map'));
     settled.setAttribute('aria-pressed', String(view === 'settled'));
-    demo.setAttribute('aria-expanded', String(view === 'demo'));
-    player.hidden = view !== 'demo';
-    caseNote.hidden = view !== 'demo' && view !== 'settled';
+    demo.setAttribute('aria-expanded', String(playing));
+    player.hidden = !playing;
+    caseNote.hidden = !playing && view !== 'settled';
     viewport.classList.toggle('vic-view', Boolean(view));
-    if (view === 'demo') seek(progress);
+    if (playing) seek(progress);
     else viewer.setVicView(view);
+    onPlaybackChange(Boolean(analysis?.trajectory), playing);
   }
 
   function begin(enabled) {
@@ -116,17 +120,20 @@ export function setupVicPanel(viewer, onOpen) {
 
   map.addEventListener('click', () => show(mode === 'map' ? undefined : 'map'));
   settled.addEventListener('click', () => show(mode === 'settled' ? undefined : 'settled'));
-  demo.addEventListener('click', () => {
+  function toggleDemo() {
+    if (!analysis?.trajectory) return;
     if (mode === 'demo') {
-      show('map');
+      show(beforeDemo);
       return;
     }
+    beforeDemo = mode;
     progress = 0;
     show('demo');
     viewer.reset();
     viewport.scrollIntoView({ block: 'nearest' });
     resume();
-  });
+  }
+  demo.addEventListener('click', toggleDemo);
   byId('vic-return').addEventListener('click', () => show('map'));
   slider.addEventListener('input', () => {
     pause();
@@ -135,5 +142,5 @@ export function setupVicPanel(viewer, onOpen) {
   });
   play.addEventListener('click', () => { if (animation) pause(); else resume(); });
 
-  return { begin, finish, close() { if (mode) show(undefined); }, error() { status.textContent = 'VIC could not analyze this toolpath.'; } };
+  return { begin, finish, toggleDemo, close() { if (mode) show(undefined); }, error() { status.textContent = 'VIC could not analyze this toolpath.'; } };
 }

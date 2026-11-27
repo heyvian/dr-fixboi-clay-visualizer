@@ -4,7 +4,9 @@ function formatTime(seconds, total) {
   return Math.floor(whole / 60) + ':' + String(whole % 60).padStart(2, '0');
 }
 
-export function setupToolpathPanel(viewer, onOpen) {
+const qualityNames = { fast: 'Fast', accurate: 'Accurate', vic: 'VIC' };
+
+export function setupToolpathPanel(viewer, { closeVic, toggleVic }) {
   const byId = id => document.getElementById(id);
   const toggle = byId('toolpath-toggle');
   const player = byId('toolpath-player');
@@ -14,7 +16,10 @@ export function setupToolpathPanel(viewer, onOpen) {
   const viewport = byId('viewport');
   const replayMilliseconds = 12_000;
   let duration = 0;
+  let qualityName = qualityNames.fast;
   let busy = false;
+  let hasVicReplay = false;
+  let vicOpen = false;
   let amount = 0;
   let animation = 0;
   let start = 0;
@@ -29,9 +34,9 @@ export function setupToolpathPanel(viewer, onOpen) {
     amount = value;
     const percent = Math.round(value * 100) + '%';
     const time = formatTime(value * duration, duration) + ' / ' + formatTime(duration, duration);
-    label.textContent = percent + ' · ' + time;
+    label.textContent = qualityName + ' · ' + percent + ' · ' + time;
     slider.value = String(Math.round(value * 1000));
-    slider.setAttribute('aria-valuetext', percent + ', ' + time);
+    slider.setAttribute('aria-valuetext', qualityName + ', ' + percent + ', ' + time);
     viewer.setToolpathTime(value * duration);
   }
 
@@ -48,23 +53,33 @@ export function setupToolpathPanel(viewer, onOpen) {
     play.textContent = 'Pause';
   }
 
+  function updateToggle() {
+    toggle.disabled = busy || (!duration && !hasVicReplay);
+    toggle.setAttribute('aria-controls', hasVicReplay ? 'vic-player' : player.id);
+    toggle.setAttribute('aria-expanded', String(hasVicReplay ? vicOpen : !player.hidden));
+  }
+
   function close() {
     if (player.hidden) return;
     pause();
     player.hidden = true;
-    toggle.setAttribute('aria-expanded', 'false');
+    updateToggle();
     viewport.classList.remove('toolpath-view');
     viewer.setToolpathTime();
   }
 
   toggle.addEventListener('click', () => {
+    if (hasVicReplay) {
+      toggleVic();
+      return;
+    }
     if (!player.hidden) {
       close();
       return;
     }
-    onOpen();
+    closeVic();
     player.hidden = false;
-    toggle.setAttribute('aria-expanded', 'true');
+    updateToggle();
     viewport.classList.add('toolpath-view');
     seek(0);
     resume();
@@ -81,15 +96,24 @@ export function setupToolpathPanel(viewer, onOpen) {
 
   return {
     close,
-    setDuration(seconds = 0) {
+    setDuration(seconds = 0, quality) {
       close();
       duration = seconds;
-      toggle.disabled = !duration || busy;
+      qualityName = qualityNames[quality] ?? qualityNames.fast;
+      updateToggle();
+    },
+    setVicPlayback(available, open) {
+      hasVicReplay = available;
+      vicOpen = open;
+      updateToggle();
     },
     setBusy(working) {
       busy = working;
-      if (working) close();
-      toggle.disabled = !duration || working;
+      if (working) {
+        close();
+        if (vicOpen) closeVic();
+      }
+      updateToggle();
     },
   };
 }

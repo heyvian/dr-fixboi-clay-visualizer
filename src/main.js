@@ -114,8 +114,11 @@ const fawnPanel = setupFawnPanel(settings);
 byId('quality-note').hidden = settings.quality === 'vic';
 
 if (viewer) {
-  const vicPanel = setupVicPanel(viewer, () => toolpathPanel.close());
-  const toolpathPanel = setupToolpathPanel(viewer, () => vicPanel.close());
+  const vicPanel = setupVicPanel(viewer, {
+    closeToolpath: () => toolpathPanel.close(),
+    onPlaybackChange: (available, open) => toolpathPanel.setVicPlayback(available, open),
+  });
+  const toolpathPanel = setupToolpathPanel(viewer, { closeVic: vicPanel.close, toggleVic: vicPanel.toggleDemo });
   const worker = new Worker(new URL('./preview-worker.js', import.meta.url), { type: 'module' });
   const sizeLimit = 25 * 1024 * 1024;
   let currentName;
@@ -223,7 +226,7 @@ if (viewer) {
       }
       const { dimensions, raisedHeight } = viewer.setMesh(data.mesh, isLoad, data.placementOrigin, data.raisedHeight, data.motion);
       fawnPanel.setMesh(data.mesh, currentName, dimensions);
-      toolpathPanel.setDuration(data.mesh.replay?.duration);
+      toolpathPanel.setDuration(data.mesh.replay?.duration, data.quality);
       showChecks(data.alerts, data.placementWarning, raisedHeight);
       renderPanel.setMeasurements(dimensions);
       if (isLoad || status.dataset.renderError === 'true') updateStatus('');

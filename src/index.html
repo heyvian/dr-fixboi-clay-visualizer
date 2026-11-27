@@ -157,10 +157,10 @@
                 <p id="vic-status" class="setting-note" role="status"></p>
                 <div id="vic-results" hidden>
                   <div class="vic-legend" aria-label="Failure agreement legend">
-                    <span><i class="vic-hold"></i> Holds in all</span><span><i class="vic-mild"></i> 1–2 cases</span>
+                    <span><i class="vic-hold"></i> No failure recorded</span><span><i class="vic-mild"></i> 1–2 cases</span>
                     <span><i class="vic-high"></i> 3–4 cases</span><span><i class="vic-severe"></i> 5–7 cases</span>
                   </div>
-                  <p class="setting-note">Colors show agreement across seven model cases, with different assumed clay strengths and stiffnesses.</p>
+                  <p class="setting-note">Colors show failure across seven clay cases. Each case stops depositing at its first failure, so some sections may be untested.</p>
                   <ol id="vic-hotspots" class="vic-hotspots" aria-label="Highest-risk hotspots"></ol>
                   <div class="vic-actions">
                     <button type="button" class="retro-button" id="vic-map" aria-pressed="false">Hotspots</button>
@@ -269,7 +269,7 @@
         <p><strong>Load a print.</strong> Drop in a G-code file up to 25 MB or explore the sample vase.</p>
         <p><strong>Replay the toolpath.</strong> Select Toolpath to watch the clay build in G-code order. The lime marker follows the nozzle, and you can pause or drag the scrubber to inspect any point. The replay is accelerated and the clock shows estimated print time based on G-code feed rates and pauses.</p>
         <p><strong>Check placement.</strong> A red ring and arrow show the distance from X0 Y0 when the print’s center is over 50 mm away. A solid red disk shows the estimated gap beneath a raised print. The app uses the layer height declared in supported G-code settings, preferring the first-layer height. With no declared height, it estimates half the nozzle diameter. The labels lie flat and turn as you orbit. In Render, the lettering and markings tint the canvas weave. Check G-code also flags issues such as out-of-order layers and deposition below Z0.</p>
-        <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. Experimental VIC highlights failure hotspots and demonstrates deposition, tearing, and collapse.</p>
+        <p><strong>Set up the print.</strong> The default nozzle is 4 mm. Lower viscosity makes the bead wider and flatter. Turn on Simulate gravity to estimate sag and compression. Fast gives a quick preview. Accurate uses finer deposition steps and estimates wet clay flow. In experimental VIC, choose Demonstrate to see clay build along the toolpath. The demo stops depositing at the first predicted failure and shows the clay settling.</p>
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
         <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail.</p>

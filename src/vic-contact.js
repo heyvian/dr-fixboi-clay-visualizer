@@ -1,6 +1,6 @@
 // Inelastic contact between falling bead sections, surviving clay, and the plate.
 // Positions are in G-code axes and refer to the bottom of each section.
-export function createVicContacts(nodes, diameter, position, previousZ, velocity) {
+export function createVicContacts(nodes, diameter, position, previousZ, velocity, laidVolumes) {
   const cell = diameter * 0.95;
   const stable = new Map();
   const debris = new Map();
@@ -26,7 +26,9 @@ export function createVicContacts(nodes, diameter, position, previousZ, velocity
     tallest = 0;
     for (let i = 0; i < active; i++) {
       const node = nodes[i];
-      const size = Math.sqrt(amount[i] / node.volume);
+      const laid = laidVolumes?.[i] ?? node.volume;
+      if (!laid) continue;
+      const size = Math.sqrt(amount[i] / laid);
       widths[i] = node.width * size / (1 - flatten[i]);
       heights[i] = node.height * size * (1 - flatten[i]);
       tallest = Math.max(tallest, heights[i]);
@@ -72,7 +74,7 @@ export function createVicContacts(nodes, diameter, position, previousZ, velocity
         const other = nodes[j];
         const along = Math.abs(node.length - other.length);
         if (other.run === node.run && (along < diameter * 1.4
-          || (node.closed && node.perimeter - along < diameter * 1.4))) continue;
+          || (node.loopLaid && node.perimeter - along < diameter * 1.4))) continue;
         const oldTop = (fixed ? otherBottom : previousZ[j]) + heights[j] * 0.8;
         const top = otherBottom + heights[j];
         if (top < bottom) continue;

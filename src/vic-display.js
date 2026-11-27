@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { depositedIndexCount } from './toolpath.js';
 
 export const vicColors = ['#799b93', '#f5c451', '#ff743f', '#f73564'];
 
@@ -8,7 +9,8 @@ export function createVicDisplay() {
     sections: { value: null },
     atlas: { value: new THREE.Vector3(1, 1, 1) },
     phase: { value: -1 },
-    build: { value: new THREE.Vector2(1, 1) },
+    frameCount: { value: 1 },
+    timedDraw: { value: false },
     diameter: { value: 4 },
     wet: { value: new THREE.Color('#777163') },
     holding: { value: new THREE.Color(vicColors[0]) },
@@ -24,7 +26,8 @@ export function createVicDisplay() {
       uniform sampler2D sections;
       uniform vec3 atlas;
       uniform float phase;
-      uniform vec2 build;
+      uniform float frameCount;
+      uniform bool timedDraw;
       attribute float vicNode;
       attribute vec3 vicCenter;
       attribute float agreement;
@@ -48,17 +51,18 @@ export function createVicDisplay() {
         if (phase >= 0.0) {
           float frame = floor(phase);
           vec2 uvA = atlasUV(frame);
-          vec2 uvB = atlasUV(min(frame + 1.0, build.y - 1.0));
+          vec2 uvB = atlasUV(min(frame + 1.0, frameCount - 1.0));
           vec4 a = texture2D(motion, uvA);
           vec4 b = texture2D(motion, uvB);
           vec2 before = mix(vec2(127.0 / 255.0, 1.0), texture2D(sections, uvA).rg, a.a);
-          vec2 section = mix(before, texture2D(sections, uvB).rg, fract(phase));
+          float animate = fract(phase) * a.a * b.a;
+          if (releaseFrame > frame && releaseFrame <= frame + 1.0) animate = 0.0;
+          vec2 section = mix(before, texture2D(sections, uvB).rg, animate);
           float areaScale = sqrt(max(0.01, section.x * 255.0 / 127.0));
           float flatten = max(0.1, section.y);
           point = vicCenter + (point - vicCenter) * vec3(areaScale / flatten, areaScale * flatten, areaScale / flatten);
-          point += mix(a.xyz, b.xyz, fract(phase));
-          float deposited = step(vicNode + 0.01, phase * atlas.y / build.x);
-          vPresent = max(a.a, b.a * deposited);
+          point += mix(a.xyz, b.xyz, animate);
+          vPresent = timedDraw ? 1.0 : a.a;
           vReleased = step(0.5, releaseFrame) * step(releaseFrame, phase);
         }
         vAgreement = agreement;
@@ -132,11 +136,12 @@ export function createVicDisplay() {
   mesh.frustumCulled = false;
   let analysis;
   let source;
+  let toolpath;
   let lastFrame = -2;
   let texture;
   let sectionsTexture;
 
-  function setMesh(geometry, result) {
+  function setMesh(geometry, result, replay) {
     mesh.visible = false;
     mesh.geometry.dispose();
     texture?.dispose();
@@ -149,6 +154,7 @@ export function createVicDisplay() {
     lastFrame = -2;
     analysis = result;
     source = geometry;
+    toolpath = replay;
     const display = new THREE.BufferGeometry();
     mesh.geometry = display;
     if (!result) return;
@@ -176,7 +182,8 @@ export function createVicDisplay() {
     uniforms.motion.value = texture;
     uniforms.sections.value = sectionsTexture;
     uniforms.atlas.value.set(width, count, height);
-    uniforms.build.value.set(result.buildFrames, result.frames);
+    uniforms.frameCount.value = result.frames;
+    uniforms.timedDraw.value = Boolean(toolpath);
     uniforms.diameter.value = result.diameter;
 
     function packTexture(values, stride, format, type) {
@@ -197,7 +204,16 @@ export function createVicDisplay() {
     const phase = mode === 'demo' && texture ? progress * (analysis.frames - 1) : -1;
     uniforms.phase.value = phase;
     const frame = Math.floor(phase);
-    if (frame === lastFrame || !analysis.cuts.length) return;
+    let nozzleTime;
+    if (phase >= 0 && toolpath) {
+      const buildFrame = Math.min(frame, analysis.buildFrames);
+      const from = analysis.times[buildFrame];
+      const to = analysis.times[Math.min(buildFrame + 1, analysis.buildFrames)];
+      const seconds = from + (to - from) * (phase - frame) - toolpath.start;
+      mesh.geometry.setDrawRange(0, depositedIndexCount(toolpath, seconds));
+      if (frame < analysis.buildFrames) nozzleTime = seconds;
+    } else mesh.geometry.setDrawRange(0, source.index.count);
+    if (frame === lastFrame || !analysis.cuts.length) return nozzleTime;
     const { cuts, stripLength } = analysis;
     const target = mesh.geometry.index;
     const original = source.index.array;
@@ -219,6 +235,7 @@ export function createVicDisplay() {
     }
     target.needsUpdate = true;
     lastFrame = frame;
+    return nozzleTime;
   }
 
   return { mesh, setMesh, show, setColor(color) { uniforms.wet.value.set(color); } };

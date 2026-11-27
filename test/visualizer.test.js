@@ -7,6 +7,7 @@ import { clayBodies, firedScale } from '../src/clay-bodies.js';
 import { normalizeSettings } from '../src/settings.js';
 import { solveBeadFlow } from '../src/bead-flow.js';
 import { createVicContacts } from '../src/vic-contact.js';
+import { simulateVic } from '../src/vic.js';
 import { getOriginPlacement } from '../src/origin-guide.js';
 import { depositedIndexCount, nozzlePosition } from '../src/toolpath.js';
 import { exportClayModel } from '../src/fawn-export.js';
@@ -185,19 +186,27 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   const stable = makeClayMesh(parseGcode('M83\n' + wall), options).analysis;
   assert.equal(stable.held, 1);
   assert.equal(stable.hotspots.length, 0);
+  assert.equal(stable.deposited, stable.votes.length);
+  assert.equal(stable.stopped, false);
   const result = makeClayMesh(parseGcode(makeOverhangSample()), options);
-  const { analysis } = result;
+  const { analysis, replay } = result;
   assert.equal(analysis.hotspots[0].cases, analysis.totalCases);
   assert.ok(analysis.firstFailure > 1 && analysis.firstFailure < analysis.frames);
-  assert.ok(analysis.held > 0.25 && analysis.held < 0.75);
+  assert.equal(analysis.firstFailure, analysis.buildFrames);
+  assert.ok(analysis.held > 0 && analysis.held < 1);
+  assert.equal(analysis.stopped, true);
+  assert.ok(analysis.deposited > 0 && analysis.deposited < analysis.votes.length);
+  const stop = analysis.times[analysis.buildFrames] - replay.start;
+  assert.ok(depositedIndexCount(replay, stop) > 0);
+  assert.ok(depositedIndexCount(replay, stop) < result.indices.length);
   assert.equal(analysis.nodeIds.length, result.positions.length / 3);
-  assert.ok(analysis.frames >= 80 && analysis.votes.length >= 1200);
   assert.equal(analysis.centers[1], 0);
+  assert.equal(analysis.times.length, analysis.frames);
   assert.equal(analysis.sections.length, analysis.frames * analysis.votes.length * 2);
   const lastFrame = analysis.trajectory.subarray((analysis.frames - 1) * analysis.votes.length * 4);
   let landed = false;
   for (let i = 0; i < analysis.votes.length; i++) {
-    assert.equal(lastFrame[i * 4 + 3], 1);
+    assert.equal(lastFrame[i * 4 + 3], Number(i < analysis.deposited));
     const base = analysis.centers[i * 3 + 1];
     const settled = base + lastFrame[i * 4 + 1];
     assert.ok(settled >= -0.001);
@@ -209,6 +218,37 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.equal(gravityOff.trajectory, undefined);
   assert.equal(gravityOff.votes.some(Boolean), false);
   assert.equal(normalizeSettings({ quality: 'vic' }).quality, 'vic');
+});
+
+test('VIC catches a growing cantilever before it can reach its next pillar', () => {
+  const width = 25;
+  const floor = Array.from({ length: 2600 }, (_, x) => [x, -40, 0]);
+  const runs = [{ points: floor, times: floor.map((_, x) => x / 20) }];
+  for (let layer = 0; layer < 3; layer++) {
+    for (const x of [0, width]) {
+      const time = 132 + runs.length;
+      runs.push({ points: [[x, -1, layer * 2.5], [x, 1, layer * 2.5]], times: [time, time + 0.1] });
+    }
+  }
+  const points = Array.from({ length: width + 1 }, (_, x) => [x, 0, 7.5]);
+  const times = points.map((_, x) => 141 + x / 20);
+  const result = simulateVic([...runs, { points, times }], { diameter: 4, stiffness: 0.7, gravity: true });
+  const stop = result.times[result.firstFailure];
+  assert.equal(result.stopped, true);
+  assert.ok(times.includes(stop));
+  assert.ok(stop > times[0] && stop < times[width - 4]);
+  assert.ok(result.failure.subarray(floor.length + 12, result.deposited).some(Boolean));
+  assert.equal(result.failure.subarray(result.deposited).some(Boolean), false);
+});
+
+test('VIC checks the existing clay during a G-code dwell before adding more', () => {
+  const model = parseGcode('M83\nG1 X10 E2 F600\nG4 S8\nG1 X20 E2');
+  const { analysis, replay } = makeClayMesh(model, { nozzle: 4, viscosity: 65, gravity: true, quality: 'vic' });
+  const before = depositedIndexCount(replay, 2);
+  const during = analysis.times.filter(time => time - replay.start > 2 && time - replay.start < 8);
+  assert.ok(during.length > 2);
+  for (const time of during) assert.equal(depositedIndexCount(replay, time - replay.start), before);
+  assert.equal(analysis.deposited, analysis.votes.length);
 });
 
 test('VIC debris stacks on other falling clay and slides sideways against a wall', () => {

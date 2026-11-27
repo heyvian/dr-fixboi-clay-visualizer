@@ -323,7 +323,7 @@ export function createViewer(container, axes, drafting) {
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-    vicDisplay.setMesh(geometry, mesh.analysis);
+    vicDisplay.setMesh(geometry, mesh.analysis, mesh.replay);
     // Use the placed clay's underside for the readout. A nominally seated
     // toolpath can have small gaps in the generated curved bead profile.
     raisedHeight = estimatedGap && Number.isFinite(min.y) ? Math.max(0, min.y) : 0;
@@ -435,19 +435,26 @@ export function createViewer(container, axes, drafting) {
       renderer.shadowMap.needsUpdate = true;
     }
     shadow.visible = !renderer.shadowMap.enabled && count > 0;
-    nozzleMarker.visible = active && Boolean(toolpathMotion) && seconds < toolpathReplay.duration;
+    updateNozzle(seconds, clay);
+    render();
+  }
+
+  function updateNozzle(seconds, parent) {
+    nozzleMarker.visible = seconds !== undefined && Boolean(toolpathMotion) && seconds < toolpathReplay.duration;
     if (nozzleMarker.visible) {
+      if (nozzleMarker.parent !== parent) parent.add(nozzleMarker);
       const { start, origin, nozzleLift } = toolpathReplay;
       const [x, y, z] = nozzlePosition(toolpathMotion, start + seconds);
       nozzleMarker.position.set(x - origin[0], Math.max(0, z - origin[2] + nozzleLift) + nozzleMarker.scale.y / 2, origin[1] - y);
     }
-    render();
   }
 
   function setVicView(mode, progress = 0) {
     const wasVisible = vicDisplay.mesh.visible;
     vicMode = mode;
-    vicDisplay.show(mode, progress);
+    const nozzleTime = vicDisplay.show(mode, progress);
+    if (!toolpathActive) updateNozzle(nozzleTime, vicDisplay.mesh);
+    shadow.visible = !renderer.shadowMap.enabled && mode !== 'demo' && clay.geometry.drawRange.count > 0;
     if (wasVisible !== vicDisplay.mesh.visible) {
       updateMeshVisibility();
       renderer.shadowMap.needsUpdate = true;
@@ -568,7 +575,7 @@ export function createViewer(container, axes, drafting) {
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
     fill.intensity = active ? 0.33 : 0.52;
     grid.visible = !active;
-    shadow.visible = !active && clay.geometry.drawRange.count > 0;
+    shadow.visible = !active && vicMode !== 'demo' && clay.geometry.drawRange.count > 0;
     if (studioFloor) studioFloor.visible = studioProps.group.visible = active;
     renderer.shadowMap.enabled = active;
     key.castShadow = active;

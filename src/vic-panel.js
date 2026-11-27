@@ -33,9 +33,10 @@ export function setupVicPanel(viewer, onOpen) {
     const frame = progress * (analysis.frames - 1);
     const fails = analysis.firstFailure < analysis.frames;
     const loss = frame >= analysis.firstFailure;
-    const label = progress >= 1 ? (fails ? 'After collapse' : 'Complete · bead sections held')
-      : frame >= analysis.buildFrames ? (loss ? 'Settling after failure' : 'Checking the completed print')
-        : loss ? 'Depositing after first failure' : 'Depositing';
+    const printed = Math.min(99, Math.floor(100 * analysis.deposited / analysis.votes.length));
+    const label = loss && analysis.stopped ? (progress >= 1 ? 'Settled' : 'Print stopped · settling') + ' · ' + printed + '% deposited'
+      : progress >= 1 ? (fails ? 'After collapse' : 'Complete · bead sections held')
+        : loss ? 'Settling after failure' : frame >= analysis.buildFrames ? 'Checking the completed print' : 'Depositing';
     if (stage.textContent !== label) stage.textContent = label;
     slider.setAttribute('aria-valuetext', Math.round(100 * progress) + '% · ' + label);
     viewer.setVicView('demo', progress);
@@ -104,7 +105,7 @@ export function setupVicPanel(viewer, onOpen) {
     }));
     hotspots.hidden = !analysis.hotspots.length;
     const label = analysis.strength === 1 ? 'Nominal clay case' : 'Softer clay case at ' + Math.round(analysis.strength * 100) + '% of nominal strength and stiffness';
-    caseNote.textContent = label + ' · ' + Math.round(analysis.held * 100) + '% of sampled bead sections held.';
+    caseNote.textContent = label + ' · ' + Math.round(analysis.held * 100) + '% of deposited bead sections held.';
     results.hidden = false;
     show('map');
   }

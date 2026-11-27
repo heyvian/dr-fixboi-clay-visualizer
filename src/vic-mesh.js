@@ -3,8 +3,8 @@ import { writeBeadStrip, writeRingCap } from './bead-mesh.js';
 import { depositedIndexCount } from './toolpath.js';
 
 export function bakeVicCollapse({ positions, indices, analysis, replay }, stripRanges) {
-  const { frames, firstFailure, stripLength, trajectory, sections, centers, tangents, diameter, nodeIds } = analysis;
-  if (!trajectory || firstFailure >= frames) return undefined;
+  const { frames, failed, stripLength, trajectory, sections, centers, tangents, diameter, nodeIds } = analysis;
+  if (!trajectory || !failed) return undefined;
 
   const frame = frames - 1;
   const nodeCount = centers.length / 3;

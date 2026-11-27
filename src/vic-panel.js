@@ -1,4 +1,5 @@
 import { vicCauses } from './vic.js';
+import { formatLength } from './dimensions.js';
 
 export function setupVicPanel(viewer, onOpen) {
   const byId = id => document.getElementById(id);
@@ -7,6 +8,7 @@ export function setupVicPanel(viewer, onOpen) {
   const results = byId('vic-results');
   const hotspots = byId('vic-hotspots');
   const map = byId('vic-map');
+  const settled = byId('vic-settled');
   const demo = byId('vic-demo');
   const player = byId('vic-player');
   const play = byId('vic-play');
@@ -35,7 +37,7 @@ export function setupVicPanel(viewer, onOpen) {
     const loss = frame >= analysis.firstFailure;
     const printed = Math.min(99, Math.floor(100 * analysis.deposited / analysis.votes.length));
     const label = loss && analysis.stopped ? (progress >= 1 ? 'Settled' : 'Print stopped · settling') + ' · ' + printed + '% deposited'
-      : progress >= 1 ? (fails ? 'After collapse' : 'Complete · bead sections held')
+      : progress >= 1 ? (fails ? 'After collapse' : analysis.failed ? 'Complete · local tears' : 'Complete · bead sections held')
         : loss ? 'Settling after failure' : frame >= analysis.buildFrames ? 'Checking the completed print' : 'Depositing';
     if (stage.textContent !== label) stage.textContent = label;
     slider.setAttribute('aria-valuetext', Math.round(100 * progress) + '% · ' + label);
@@ -60,9 +62,10 @@ export function setupVicPanel(viewer, onOpen) {
     pause();
     mode = view;
     map.setAttribute('aria-pressed', String(view === 'map'));
+    settled.setAttribute('aria-pressed', String(view === 'settled'));
     demo.setAttribute('aria-expanded', String(view === 'demo'));
     player.hidden = view !== 'demo';
-    caseNote.hidden = view !== 'demo';
+    caseNote.hidden = view !== 'demo' && view !== 'settled';
     viewport.classList.toggle('vic-view', Boolean(view));
     if (view === 'demo') seek(progress);
     else viewer.setVicView(view);
@@ -104,13 +107,15 @@ export function setupVicPanel(viewer, onOpen) {
       return item;
     }));
     hotspots.hidden = !analysis.hotspots.length;
-    const label = analysis.strength === 1 ? 'Nominal clay case' : 'Softer clay case at ' + Math.round(analysis.strength * 100) + '% of nominal strength and stiffness';
-    caseNote.textContent = label + ' · ' + Math.round(analysis.held * 100) + '% of deposited bead sections held.';
+    const outcome = analysis.stopped ? 'Print stopped' : analysis.failed ? 'Completed with local tears' : 'Print held';
+    const sag = analysis.sag >= 0.05 ? ' · up to ' + formatLength(analysis.sag) + ' mm sag in clay still standing' : '';
+    caseNote.textContent = outcome + sag + '.';
     results.hidden = false;
-    show('map');
+    show(analysis.firstFailure < analysis.frames ? 'map' : 'settled');
   }
 
   map.addEventListener('click', () => show(mode === 'map' ? undefined : 'map'));
+  settled.addEventListener('click', () => show(mode === 'settled' ? undefined : 'settled'));
   demo.addEventListener('click', () => {
     if (mode === 'demo') {
       show('map');

@@ -242,7 +242,8 @@ export function createVicDisplay() {
   function show(mode, progress = 0) {
     mesh.visible = Boolean(analysis && mode);
     if (!mesh.visible) return;
-    const phase = mode === 'demo' && texture ? progress * (analysis.frames - 1) : -1;
+    const phase = texture && (mode === 'demo' || mode === 'settled')
+      ? (mode === 'settled' ? 1 : progress) * (analysis.frames - 1) : -1;
     uniforms.phase.value = phase;
     const frame = Math.floor(phase);
     let nozzleTime;

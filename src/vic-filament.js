@@ -2,6 +2,7 @@
 // Intact sections can anchor a yielded strand until its wet neck gives way.
 export function createVicFilament(nodes, ranges, stiffness) {
   const links = [];
+  const neighbors = nodes.map(() => []);
   const originalLengths = new Float32Array(nodes.length);
   const stretchedLengths = new Float32Array(nodes.length);
   const directions = new Float32Array(nodes.length * 3);
@@ -14,6 +15,8 @@ export function createVicFilament(nodes, ranges, stiffness) {
     const to = nodes[b];
     const length = Math.hypot(from.x - to.x, from.y - to.y, from.z - to.z);
     if (length < 0.0001) return;
+    neighbors[a].push(links.length);
+    neighbors[b].push(links.length);
     links.push({ a, b, strand, laidAt, length, rest: length, damage: 0, torn: false,
       limit: strand ? extensionLimit : 0.12 + coverage * 0.20 });
   }
@@ -27,10 +30,16 @@ export function createVicFilament(nodes, ranges, stiffness) {
     if (contact) join(node.index, contact.index, false, node.time, contact.coverage);
   }
 
-  function stretch(position, inverseMass, laidAt, elapsed, tears, frame) {
+  function linksFor(movers) {
+    const indices = new Set();
+    for (const i of movers) for (const link of neighbors[i]) indices.add(link);
+    return [...indices].sort((a, b) => a - b).map(i => links[i]);
+  }
+
+  function stretch(position, inverseMass, laidAt, elapsed, tears, frame, movingLinks) {
     const relaxation = 1 - Math.exp(-elapsed / elasticTime);
     for (let pass = 0; pass < 2; pass++) {
-      for (const link of links) {
+      for (const link of movingLinks) {
         const { a, b, strand, laidAt: birth, length, limit } = link;
         const movable = inverseMass[a] + inverseMass[b];
         if (link.torn || birth > laidAt || !movable) continue;
@@ -68,11 +77,11 @@ export function createVicFilament(nodes, ranges, stiffness) {
     }
   }
 
-  function sectionLengths(position, failure, laidAt, captureDirections = false) {
+  function sectionLengths(position, failure, laidAt, captureDirections = false, measuredLinks = links) {
     originalLengths.fill(0);
     stretchedLengths.fill(0);
     if (captureDirections) directions.fill(0);
-    for (const { a, b, strand, length, laidAt: birth, torn } of links) {
+    for (const { a, b, strand, length, laidAt: birth, torn } of measuredLinks) {
       const yielded = failure[a] || failure[b];
       if (!strand || torn || birth > laidAt || (!captureDirections && !yielded)) continue;
       const i = a * 3;
@@ -118,5 +127,5 @@ export function createVicFilament(nodes, ranges, stiffness) {
     data[offset + 1] = Math.round(128 + 127 * v);
   }
 
-  return { links, stretch, sectionLengths, areaRatio, writeDirection };
+  return { links, linksFor, stretch, sectionLengths, areaRatio, writeDirection };
 }

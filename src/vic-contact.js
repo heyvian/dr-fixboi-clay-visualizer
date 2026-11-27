@@ -10,6 +10,7 @@ export function createVicContacts(nodes, diameter, position, previousZ, velocity
   const key = (x, y) => x + ':' + y;
   const heightOrder = (a, b) => predicted[a * 3 + 2] - predicted[b * 3 + 2];
   let tallest = 0;
+  let tallestStable = 0;
 
   function insert(grid, i) {
     const p = i * 3;
@@ -19,22 +20,35 @@ export function createVicContacts(nodes, diameter, position, previousZ, velocity
     else grid.set(column, [i]);
   }
 
-  function rebuild(active, failure, amount, flatten, keepStable = false) {
-    if (!keepStable) stable.clear();
+  function rebuild(active, moving, amount, flatten, keepStable = false, movers) {
     debris.clear();
-    predicted.set(position.subarray(0, active * 3));
-    tallest = 0;
-    for (let i = 0; i < active; i++) {
+    if (!keepStable) {
+      stable.clear();
+      tallestStable = 0;
+    }
+    tallest = tallestStable;
+
+    function add(i) {
       const node = nodes[i];
       const laid = laidVolumes?.[i] ?? node.volume;
-      if (!laid) continue;
+      if (!laid) return;
+      const p = i * 3;
+      predicted[p] = position[p];
+      predicted[p + 1] = position[p + 1];
+      predicted[p + 2] = position[p + 2];
       const size = Math.sqrt(amount[i] / laid * (sectionAreaRatio?.(i) ?? 1));
       widths[i] = node.width * size / (1 - flatten[i]);
       heights[i] = node.height * size * (1 - flatten[i]);
       tallest = Math.max(tallest, heights[i]);
-      if (failure[i]) insert(debris, i);
-      else if (!keepStable) insert(stable, i);
+      if (moving[i]) insert(debris, i);
+      else if (!keepStable) {
+        tallestStable = Math.max(tallestStable, heights[i]);
+        insert(stable, i);
+      }
     }
+
+    if (keepStable && movers) for (const i of movers) add(i);
+    else for (let i = 0; i < active; i++) add(i);
     if (!keepStable) for (const bucket of stable.values()) bucket.sort(heightOrder);
     for (const bucket of debris.values()) bucket.sort(heightOrder);
   }

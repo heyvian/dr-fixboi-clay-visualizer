@@ -278,7 +278,7 @@ export function makeClayMesh(model, options) {
   const indexEnds = new Uint32Array(segments + caps);
   const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
   const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
-  const collapseStrips = analysis?.firstFailure < analysis?.frames ? [] : undefined;
+  const collapseStrips = analysis?.failed ? [] : undefined;
   const cuts = [];
   let nodeIndex = 0;
   // A rounded rectangle gives adjacent layers wider contact than a round tube.

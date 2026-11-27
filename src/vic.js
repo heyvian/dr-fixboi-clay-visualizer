@@ -20,6 +20,7 @@ function buildGraph(runs, diameter, stiffness) {
   const nodes = [];
   const columns = new Map();
   const cell = diameter * 0.9;
+  const catchDistance = diameter * 2.25;
   const gridKey = (x, y, z) => x + ':' + y + ':' + z;
   const ranges = [];
   for (const { points, edgeAreas, times, closed, endTime } of runs) {
@@ -55,24 +56,32 @@ function buildGraph(runs, diameter, stiffness) {
       const voxelZ = Math.floor(z / cell);
       const section = width * height * 0.88;
       const node = { x, y, z, time: times?.[i] ?? index * diameter / 25, index, length, run: ranges.length - 1,
-        width, height, span, ground, tangent, incoming: section * incoming / 2,
+        width, height, span, ground, tangent, seatedZ: ground ? 0 : z, incoming: section * incoming / 2,
         outgoing: section * outgoing / 2, contacts: [] };
       if (!ground) {
         let first;
+        let landing;
         const options = [];
-        for (let dz = -2; dz <= 0; dz++) {
+        for (let dz = -3; dz <= 0; dz++) {
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               const bucket = columns.get(gridKey(voxelX + dx, voxelY + dy, voxelZ + dz));
               if (!bucket) continue;
               for (const candidate of bucket) {
                 if (candidate.index >= start && length - candidate.length < diameter * 1.8) continue;
-                const rise = z - candidate.z;
+                const rise = z - candidate.seatedZ;
                 const depth = (height + candidate.height) / 2;
-                if (rise < diameter * 0.13 || rise > depth + diameter * 0.19) continue;
+                if (rise < diameter * 0.13 || rise > depth + catchDistance) continue;
                 const lateral = Math.hypot(x - candidate.x, y - candidate.y);
                 const overlap = (width + candidate.width) / 2 - lateral;
                 if (overlap < diameter * 0.11) continue;
+                if (rise > depth + diameter * 0.19) {
+                  const landingZ = candidate.seatedZ + depth;
+                  if (overlap >= width * 0.35 && (!landing || landingZ > landing.z)) {
+                    landing = { index: candidate.index, coverage: overlap / width, z: landingZ };
+                  }
+                  continue;
+                }
                 const coverage = clamp(overlap / width, 0.04, 1)
                   * clamp(1 - Math.max(0, rise - depth) / (diameter * 0.32), 0.3, 1);
                 const contact = { index: candidate.index, coverage, pitch: rise };
@@ -90,27 +99,34 @@ function buildGraph(runs, diameter, stiffness) {
           for (const option of options) {
             if (option.coverage < first.coverage * 0.60 || node.contacts.length >= 3) break;
             const other = nodes[option.index];
-            if (Math.abs(other.z - best.z) > diameter * 0.31) continue;
+            if (Math.abs(other.seatedZ - best.seatedZ) > diameter * 0.31) continue;
             if (node.contacts.some(contact => {
               const point = nodes[contact.index];
               return (other.x - point.x) ** 2 + (other.y - point.y) ** 2 < (diameter * 0.22) ** 2;
             })) continue;
             node.contacts.push(option);
           }
+        } else if (landing) {
+          // The bead can sag onto a surface directly below it within a short drop.
+          node.contacts.push(landing);
+          node.seatedZ = landing.z;
+        } else if (z <= catchDistance) {
+          node.ground = true;
+          node.seatedZ = 0;
         }
       }
-      const key = gridKey(voxelX, voxelY, voxelZ);
+      const key = gridKey(voxelX, voxelY, Math.floor(node.seatedZ / cell));
       if (!columns.has(key)) columns.set(key, []);
       const bucket = columns.get(key);
       if (bucket.length >= 64) bucket.shift();
       bucket.push(node);
       nodes.push(node);
-      if (ground || node.contacts.length) anchor = node;
+      if (node.ground || node.contacts.length) anchor = node;
       node.freeTail = anchor ? length - anchor.length : Infinity;
     }
     range.endTime ??= nodes[end - 1].time;
   }
-  return { nodes, ranges };
+  return { nodes, ranges, catchDistance };
 }
 
 function assignAnchors(nodes, ranges, direct, failure, count, clock, left, right) {
@@ -173,6 +189,7 @@ function* depositionSteps({ nodes, ranges }, diameter, yieldStress, modulus) {
   const cantileverStep = diameter * 2;
   let lastCount = 0;
   let lastTime = nodes[0].time;
+  let lastRisk = 0;
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
     const previous = nodes[i - 1];
@@ -192,6 +209,9 @@ function* depositionSteps({ nodes, ranges }, diameter, yieldStress, modulus) {
     const count = i + 1;
     const next = nodes[count];
     const risk = node.index > ranges[node.run].start ? freeTailRisk(node, yieldStress, modulus) : 0;
+    const checked = nodes[lastCount - 1];
+    const unstable = risk >= 1.6 && (lastRisk < 1.6 || checked?.run !== node.run || node.length - checked.length >= diameter);
+    lastRisk = risk;
     // Recheck the anchor as a free end grows. It may yield under the added
     // leverage before the free end itself reaches its deflection limit.
     const longerCantilever = Number.isFinite(node.freeTail) && previous?.run === node.run
@@ -199,7 +219,7 @@ function* depositionSteps({ nodes, ranges }, diameter, yieldStress, modulus) {
     const beforeSupport = risk > 1 && (!next?.freeTail || next?.run !== node.run)
       && count - lastCount >= Math.ceil(sampleStep / 2);
     if (count === 1 || count === nodes.length || count - lastCount >= sampleStep
-      || node.time - lastTime >= timeStep || risk >= 1.6 || longerCantilever || beforeSupport) {
+      || node.time - lastTime >= timeStep || unstable || longerCantilever || beforeSupport) {
       lastCount = count;
       lastTime = node.time;
       yield { count, clock: lastTime };
@@ -209,7 +229,7 @@ function* depositionSteps({ nodes, ranges }, diameter, yieldStress, modulus) {
 }
 
 function solveLoads(graph, diameter, stiffness, factor, onStep) {
-  const { nodes, ranges } = graph;
+  const { nodes, ranges, catchDistance } = graph;
   const size = nodes.length;
   const failure = new Uint16Array(size);
   const cause = new Uint8Array(size);
@@ -223,6 +243,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
   const sag = new Float32Array(size);
   const loading = new Float32Array(size);
   const damage = new Float32Array(size);
+  const seatedOnBed = new Uint8Array(size);
   const yieldStress = baseYield(stiffness) * factor;
   const modulus = (6500 + 110000 * stiffness ** 2) * factor;
   const capillary = 62 / diameter;
@@ -238,6 +259,60 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
     momentY[receiver.index] += momentY[donor.index] * fraction * 0.39 + amount * (donor.y - receiver.y);
   }
 
+  function contactHolds(donor, contact) {
+    const index = contact.index;
+    return !failure[index] && (!seatedOnBed[index]
+      || donor.seatedZ <= catchDistance + (donor.height + nodes[index].height) / 2);
+  }
+
+  function slipOntoBed(node) {
+    if (node.z > catchDistance) return false;
+    seatedOnBed[node.index] = 1;
+    sag[node.index] = Math.max(0, node.z);
+    damage[node.index] = 0;
+    return true;
+  }
+
+  function hasUnsupportedGap(count) {
+    const tip = nodes[count - 1];
+    let i = 0;
+    while (i < count) {
+      if (!failure[i]) {
+        i++;
+        continue;
+      }
+      const start = nodes[i];
+      const { end } = ranges[start.run];
+      let span = 0;
+      do {
+        span += nodes[i++].span;
+      } while (i < Math.min(count, end) && failure[i]);
+      if (span < diameter * 2.5) continue;
+      const last = nodes[i - 1];
+      const atNozzle = tip.run === last.run && tip.length - last.length <= diameter * 3;
+      // The nozzle can move past old defects. A larger tear in the deposited
+      // wall can still end the build even after the nozzle has left that area.
+      if (!atNozzle) {
+        if (span >= diameter * 12) return true;
+        continue;
+      }
+
+      // A short gap can spoil one patch without ending the print. Look for a
+      // nearby restart on clay that's already been laid and is still supported.
+      // Those anchors never carry the earlier gap in the load solve itself.
+      const restartLimit = start.length + diameter * 9;
+      let restart = i;
+      while (restart < end && nodes[restart].length <= restartLimit) {
+        const node = nodes[restart];
+        if (!failure[restart] && (node.ground || seatedOnBed[restart] || node.contacts.some(contact =>
+          contact.index < count && volume[contact.index] > 0 && contact.coverage >= 0.24 && contactHolds(node, contact)))) break;
+        restart++;
+      }
+      if (restart === end || nodes[restart].length > restartLimit) return true;
+    }
+    return false;
+  }
+
   function check({ count, clock, laidAt = clock }) {
     const frame = times.length;
     const elapsed = clock - times.at(-1);
@@ -250,7 +325,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
     for (let i = 0; i < count; i++) {
       const node = nodes[i];
       volume[i] = failure[i] ? 0 : depositedVolume(node, ranges[node.run], count, laidAt);
-      if (volume[i] && (node.ground || node.contacts.some(contact => !failure[contact.index]))) direct[i] = 1;
+      if (volume[i] && (node.ground || seatedOnBed[i] || node.contacts.some(contact => contactHolds(node, contact)))) direct[i] = 1;
     }
     assignAnchors(nodes, ranges, direct, failure, count, laidAt, left, right);
     for (let i = 0; i < count; i++) {
@@ -274,8 +349,10 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
       sag[i] = clamp(deflection, 0, node.height * 1.4);
       damage[i] += Math.min(elapsed, clock - node.time) * Math.max(0, loading[i] - 1) ** 1.4 * 2.9;
       if (loading[i] >= 1.6 || damage[i] >= 1) {
-        failure[i] = frame;
-        lostSupport = true;
+        if (!slipOntoBed(node)) {
+          failure[i] = frame;
+          lostSupport = true;
+        }
       } else if (spanned) {
         transfer(node, before, b / reach);
         transfer(node, after, a / reach);
@@ -288,12 +365,13 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
     for (let i = count - 1; i >= 0; i--) {
       if (failure[i] || !direct[i]) continue;
       const node = nodes[i];
+      const onBed = node.ground || seatedOnBed[i];
       let coverage = 0;
       let shares = 0;
       let supportX = 0;
       let supportY = 0;
       for (const contact of node.contacts) {
-        if (failure[contact.index]) continue;
+        if (onBed || !contactHolds(node, contact)) continue;
         const receiver = nodes[contact.index];
         coverage = Math.max(coverage, contact.coverage);
         const share = contact.coverage ** 2;
@@ -301,7 +379,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
         supportX += (receiver.x - node.x) * share;
         supportY += (receiver.y - node.y) * share;
       }
-      if (node.ground) coverage = 1;
+      if (onBed) coverage = 1;
       const age = Math.max(0, clock - node.time);
       const aging = clayRecovery(age);
       const footprint = node.width * Math.max(diameter * 0.19, node.span) * Math.max(0.27, coverage);
@@ -309,7 +387,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
       const lever = Math.hypot(momentX[i], momentY[i]) / volume[i];
       const localLever = (shares ? Math.hypot(supportX, supportY) / shares * (1 - coverage) : 0) + lever;
       const compression = (stress + capillary) / (1.9 * yieldStress * aging);
-      const overhang = node.ground ? 0 : stress * (2.4 * localLever / node.width + (1 - coverage) ** 2)
+      const overhang = onBed ? 0 : stress * (2.4 * localLever / node.width + (1 - coverage) ** 2)
         / (yieldStress * aging);
       const ratio = coverage ? Math.max(compression, overhang) : 20;
       loading[i] = ratio;
@@ -317,18 +395,21 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
       peak[i] = Math.max(peak[i], ratio);
       // A shear-thinning creep response once local stress approaches the yield envelope.
       const creep = Math.max(0, ratio - 0.47) ** 1.65 * (1.12 - 0.67 * stiffness);
-      sag[i] = node.ground ? Math.max(0, node.z) : Math.min(node.height * 0.55, node.height * creep * (1 - Math.exp(-age / 4.0)));
+      const landing = Math.max(0, node.z - (onBed ? 0 : node.seatedZ));
+      sag[i] = onBed ? landing : landing + Math.min(node.height * 0.55, node.height * creep * (1 - Math.exp(-age / 4.0)));
       damage[i] += Math.min(elapsed, age) * Math.max(0, ratio - 1) ** 1.4 * 2.9;
       if (ratio >= 1.6 || damage[i] >= 1) {
-        failure[i] = frame;
-        lostSupport = true;
+        if (onBed || !slipOntoBed(node)) {
+          failure[i] = frame;
+          lostSupport = true;
+        }
       } else if (shares) {
         for (const contact of node.contacts) {
-          if (!failure[contact.index]) transfer(node, nodes[contact.index], contact.coverage ** 2 / shares);
+          if (contactHolds(node, contact)) transfer(node, nodes[contact.index], contact.coverage ** 2 / shares);
         }
       }
     }
-    if (lostSupport && !firstFailure) firstFailure = frame;
+    if (lostSupport && !firstFailure && hasUnsupportedGap(count)) firstFailure = frame;
     onStep?.(frame, count, laidAt, elapsed, failure, sag, loading);
   }
 
@@ -349,7 +430,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
 function captureMotion(graph, diameter, stiffness, factor, schedule) {
   const { nodes, ranges } = graph;
   const count = nodes.length;
-  // Keep the last deposition check (the break, if printing stopped) and every
+  // Keep the last deposition check (the stop, if printing stopped) and every
   // settling check. Coarser storage for stable motion keeps the GPU atlas small.
   const stride = Math.max(1, Math.ceil(schedule.buildFrames / 100));
   const earlier = Math.ceil(schedule.buildFrames / stride);
@@ -378,13 +459,20 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
   const contacts = createVicContacts(nodes, diameter, position, previousZ, velocity, laidVolumes, filament.areaRatio);
   const step = 1 / 128;
   const creepRate = 2 + 6 * (1 - stiffness);
+  let moveUntil = -Infinity;
+  const movers = [];
   for (const node of nodes) {
     position.set([node.x, node.y, node.z], node.index * 3);
   }
 
   times[0] = schedule.times[0];
   const result = solveLoads(graph, diameter, stiffness, factor, (frame, active, laidAt, elapsed, failure, sag, loading) => {
-    let falling = false;
+    const clock = schedule.times[frame];
+    const afterCollapse = frame > schedule.buildFrames && schedule.firstFailure < schedule.frames;
+    const remainingMotion = afterCollapse ? elapsed : Math.max(0, moveUntil - (clock - elapsed));
+    const motionTime = Math.min(elapsed, 0.4, remainingMotion);
+    movers.length = 0;
+    let displaced = false;
     for (let i = 0; i < active; i++) {
       const node = nodes[i];
       const p = 3 * i;
@@ -392,30 +480,35 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       amount[i] += laid - laidVolumes[i];
       laidVolumes[i] = laid;
       const released = Boolean(failure[i] && failure[i] < frame);
-      inverseMass[i] = released ? 1 / Math.max(0.04, amount[i]) : 0;
-      falling ||= released;
-      const age = Math.max(0, schedule.times[frame] - node.time);
+      const moving = released && (afterCollapse || clock - elapsed - schedule.times[failure[i]] < 0.8);
+      inverseMass[i] = moving ? 1 / Math.max(0.04, amount[i]) : 0;
+      if (moving) movers.push(i);
+      if (failure[i] === frame) moveUntil = clock + 0.8;
+      const age = Math.max(0, clock - node.time);
       localYield[i] = flowYield * clayRecovery(age);
       if (!failure[i]) {
         const wetTime = Math.min(elapsed, age);
         position[p + 2] += (1 - Math.exp(-wetTime * creepRate)) * (Math.max(0, node.z - sag[i]) - position[p + 2]);
         if (node.ground || node.contacts.length) {
-          const spread = clamp(loading[i] - 0.26, 0, 1) * (0.27 - 0.16 * stiffness);
+          const landing = clamp(sag[i] / node.height, 0, 1);
+          const spread = clamp(loading[i] - 0.26, 0, 1) * (0.27 - 0.16 * stiffness) + landing * (0.20 - 0.12 * stiffness);
           flatten[i] += Math.max(0, spread - flatten[i]) * (1 - Math.exp(-wetTime * creepRate * 0.4));
         }
       }
+      displaced ||= released || Math.abs(position[p + 2] - node.z) > 0.05;
     }
 
-    const iterations = falling ? Math.ceil(elapsed / step) : Math.min(4, Math.ceil(elapsed / 0.03));
-    const delta = iterations ? Math.min(falling ? step : 0.12, elapsed / iterations) : 0;
+    const falling = motionTime > 0 && movers.length > 0;
+    const iterations = falling ? Math.ceil(motionTime / step) : Math.min(4, Math.ceil(elapsed / 0.03));
+    const delta = iterations ? Math.min(falling ? step : 0.12, (falling ? motionTime : elapsed) / iterations) : 0;
     const drag = Math.exp(-delta * 3.4);
-    const pressureDecay = Math.exp(-delta * 9);
     const flattenRate = 1 - Math.exp(-delta * (6.4 - 2.9 * stiffness));
+    const movingLinks = falling ? filament.linksFor(movers) : undefined;
+    const flowInterval = falling && !afterCollapse ? Math.ceil(iterations / 4) : 1;
+    let lastFlow = -1;
     for (let iteration = 0; iteration < iterations; iteration++) {
-        // Yielded strands retain some stretch after the load is removed.
       if (falling) {
-        for (let i = 0; i < active; i++) {
-          if (!inverseMass[i]) continue;
+        for (const i of movers) {
           const p = i * 3;
           previousX[i] = position[p];
           previousY[i] = position[p + 1];
@@ -424,11 +517,10 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
           position[p + 1] += velocity[p + 1] * drag * delta;
           position[p + 2] += (velocity[p + 2] * drag - 9810 * delta) * delta;
         }
-        filament.stretch(position, inverseMass, laidAt, delta, tears, frame);
-        filament.sectionLengths(position, failure, laidAt);
-        contacts.rebuild(active, inverseMass, amount, flatten, iteration > 0);
-        for (let i = 0; i < active; i++) {
-          if (!inverseMass[i]) continue;
+        filament.stretch(position, inverseMass, laidAt, delta, tears, frame, movingLinks);
+        filament.sectionLengths(position, failure, laidAt, false, iteration ? movingLinks : undefined);
+        contacts.rebuild(active, inverseMass, amount, flatten, iteration > 0, movers);
+        for (const i of movers) {
           const p = i * 3;
           velocity[p] = (position[p] - previousX[i]) / delta;
           velocity[p + 1] = (position[p + 1] - previousY[i]) / delta;
@@ -444,6 +536,10 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
 
       // Pressure differences drive shear-thinning flow through wet connections.
       // Each transfer removes exactly the volume added at its other end.
+      if ((iteration + 1) % flowInterval && iteration + 1 < iterations) continue;
+      const flowTime = delta * (iteration - lastFlow);
+      const pressureDecay = Math.exp(-flowTime * 9);
+      lastFlow = iteration;
       exchange.fill(0);
       for (let i = 0; i < active; i++) {
         const node = nodes[i];
@@ -462,7 +558,7 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
         const donor = shear > 0 ? a : b;
         const receiver = shear > 0 ? b : a;
         const transfer = Math.max(0, Math.min(
-          laidVolumes[donor] * delta * creepRate * 0.7 * yielded ** (1 / 0.6),
+          laidVolumes[donor] * flowTime * creepRate * 0.7 * yielded ** (1 / 0.6),
           (amount[donor] - 0.24 * laidVolumes[donor]) * 0.25,
           (1.92 * laidVolumes[receiver] - amount[receiver]) * 0.25,
         ));
@@ -472,7 +568,7 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       for (let i = 0; i < active; i++) amount[i] += exchange[i];
     }
     if (frame < schedule.buildFrames && frame % stride) return;
-    if (falling) filament.sectionLengths(position, failure, laidAt, true);
+    if (displaced) filament.sectionLengths(position, failure, laidAt, true);
     const replayFrame = frame < schedule.buildFrames ? frame / stride : frame - skipped;
     times[replayFrame] = schedule.times[frame];
     for (let i = 0; i < active; i++) {
@@ -487,12 +583,15 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       const area = laidVolumes[i] ? amount[i] / laidVolumes[i] * filament.areaRatio(i) : 1;
       sections[section] = Math.round(127 * clamp(area, 0.05, 2));
       sections[section + 1] = Math.round(255 * (1 - flatten[i]));
-      if (falling) filament.writeDirection(i, sections, section + 2);
+      if (displaced) filament.writeDirection(i, sections, section + 2);
     }
   });
+  function replayFrameFor(frame) {
+    return frame < schedule.buildFrames ? Math.ceil(frame / stride) : frame - skipped;
+  }
   for (let i = 0; i < count; i++) {
-    if (result.failure[i]) result.failure[i] -= skipped;
-    if (tears[i]) tears[i] -= skipped;
+    if (result.failure[i]) result.failure[i] = replayFrameFor(result.failure[i]);
+    if (tears[i]) tears[i] = replayFrameFor(tears[i]);
   }
   return { ...result, trajectory, sections, tears, times, frames, buildFrames: earlier, firstFailure: result.firstFailure - skipped };
 }
@@ -518,21 +617,21 @@ export function simulateVic(runs, { diameter, stiffness, gravity }) {
   const { nodes } = graph;
   const cases = strengths.map(factor => solveLoads(graph, diameter, stiffness, factor));
   cases.forEach(({ failure }) => failure.forEach((when, i) => { if (when) votes[i]++; }));
-  const nominal = strengths.indexOf(1);
-  let chosen = nominal;
-  if (!cases[nominal].failure.some(Boolean)) {
-    while (chosen > 0 && !cases[chosen].failure.some(Boolean)) chosen--;
-    if (!cases[chosen].failure.some(Boolean)) chosen = nominal;
-  }
-  const demo = captureMotion(graph, diameter, stiffness, strengths[chosen], cases[chosen]);
+  const nominal = cases[strengths.indexOf(1)];
+  const demo = captureMotion(graph, diameter, stiffness, 1, nominal);
   const hotspots = pickHotspots(nodes, votes, cases, diameter);
   const failed = demo.failure.reduce((sum, when) => sum + Boolean(when), 0);
+  let sag = 0;
+  const settled = (demo.frames - 1) * votes.length * 4;
+  for (let i = 0; i < demo.deposited; i++) {
+    if (!demo.failure[i]) sag = Math.max(sag, -demo.trajectory[settled + i * 4 + 1]);
+  }
   return {
     votes, hotspots, totalCases: strengths.length, frames: demo.frames, buildFrames: demo.buildFrames, gravity,
     times: demo.times, stopped: demo.stopped, deposited: demo.deposited, trajectory: demo.trajectory, sections: demo.sections,
     centers: Float32Array.from(nodes.flatMap(node => [node.x, node.z, -node.y])),
     tangents: Float32Array.from(nodes.flatMap(node => node.tangent)),
     failure: demo.failure, tears: demo.tears,
-    firstFailure: demo.firstFailure, strength: strengths[chosen], held: 1 - failed / demo.deposited,
+    firstFailure: demo.firstFailure, failed, sag, held: 1 - failed / demo.deposited,
   };
 }

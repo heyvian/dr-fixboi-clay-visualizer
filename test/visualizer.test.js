@@ -233,24 +233,33 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
 });
 
 test('VIC catches a growing cantilever before it can reach its next pillar', () => {
-  const width = 25;
+  const width = 60;
   const floor = Array.from({ length: 2600 }, (_, x) => [x, -40, 0]);
   const runs = [{ points: floor, times: floor.map((_, x) => x / 20) }];
-  for (let layer = 0; layer < 3; layer++) {
+  for (let layer = 0; layer < 5; layer++) {
     for (const x of [0, width]) {
       const time = 132 + runs.length;
       runs.push({ points: [[x, -1, layer * 2.5], [x, 1, layer * 2.5]], times: [time, time + 0.1] });
     }
   }
-  const points = Array.from({ length: width + 1 }, (_, x) => [x, 0, 7.5]);
-  const times = points.map((_, x) => 141 + x / 20);
+  const points = Array.from({ length: width + 1 }, (_, x) => [x, 0, 12.5]);
+  const times = points.map((_, x) => 144 + x / 20);
   const result = simulateVic([...runs, { points, times }], { diameter: 4, stiffness: 0.7, gravity: true });
   const stop = result.times[result.firstFailure];
   assert.equal(result.stopped, true);
   assert.ok(times.includes(stop));
   assert.ok(stop > times[0] && stop < times[width - 4]);
-  assert.ok(result.failure.subarray(floor.length + 12, result.deposited).some(Boolean));
+  assert.ok(result.failure.subarray(floor.length + 20, result.deposited).some(Boolean));
   assert.equal(result.failure.subarray(result.deposited).some(Boolean), false);
+});
+
+test('VIC shows a low offset settling and lets later clay build on it', () => {
+  const model = parseGcode('M83\nG1 X40 Z0 E4\nG0 X0 Y16 Z1.4\nG1 X40 E4\nG0 X0 Z2.8\nG1 X40 E4');
+  const { analysis } = makeClayMesh(model, { nozzle: 4, viscosity: 65, gravity: true, quality: 'vic' });
+  assert.equal(analysis.stopped, false);
+  assert.equal(analysis.deposited, analysis.votes.length);
+  assert.equal(analysis.failed, 0);
+  assert.ok(analysis.sag >= 1.3);
 });
 
 test('VIC checks the existing clay during a G-code dwell before adding more', () => {
@@ -461,7 +470,7 @@ test('FAWN bakes and caps the settled VIC geometry through the deposition cutoff
   assert.ok(analysis.stopped && analysis.tears.some(Boolean));
   assert.ok(collapse.positions.length < positions.length);
   assert.ok(collapse.indices.length < indices.length);
-  assert.ok(collapse.size[2] < 35);
+  assert.ok(collapse.size[2] < meshSize({ positions, indices })[1]);
   assert.ok(collapse.positions.every(Number.isFinite));
 
   const edgeCounts = new Map();

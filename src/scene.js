@@ -454,7 +454,7 @@ export function createViewer(container, axes, drafting) {
     vicMode = mode;
     const nozzleTime = vicDisplay.show(mode, progress);
     if (!toolpathActive) updateNozzle(nozzleTime, vicDisplay.mesh);
-    shadow.visible = !renderer.shadowMap.enabled && mode !== 'demo' && clay.geometry.drawRange.count > 0;
+    shadow.visible = !renderer.shadowMap.enabled && mode !== 'demo' && mode !== 'settled' && clay.geometry.drawRange.count > 0;
     if (wasVisible !== vicDisplay.mesh.visible) {
       updateMeshVisibility();
       renderer.shadowMap.needsUpdate = true;
@@ -575,7 +575,7 @@ export function createViewer(container, axes, drafting) {
     fill.color.set(active ? '#f4f1ec' : '#f6abd9');
     fill.intensity = active ? 0.33 : 0.52;
     grid.visible = !active;
-    shadow.visible = !active && vicMode !== 'demo' && clay.geometry.drawRange.count > 0;
+    shadow.visible = !active && vicMode !== 'demo' && vicMode !== 'settled' && clay.geometry.drawRange.count > 0;
     if (studioFloor) studioFloor.visible = studioProps.group.visible = active;
     renderer.shadowMap.enabled = active;
     key.castShadow = active;

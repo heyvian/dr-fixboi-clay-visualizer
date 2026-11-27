@@ -1,13 +1,18 @@
 import { createVicContacts } from './vic-contact.js';
+import { createVicFilament } from './vic-filament.js';
 
 const depositionChecks = 96;
-const settlingChecks = 36;
-const settlingStep = 0.1;
+const settlingTimes = [
+  ...Array.from({ length: 35 }, (_, i) => (i + 1) * 0.02),
+  ...Array.from({ length: 29 }, (_, i) => 0.7 + (i + 1) * 0.1),
+];
 const strengths = [0.56, 0.71, 0.85, 1, 1.17, 1.38, 1.65];
 const density = 1850;
 // Conversion from millimeters to meters in stress and beam equations.
 const weightGradient = density * 9.81 / 1000;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const baseYield = stiffness => 610 + 6100 * stiffness ** 2.15;
+const clayRecovery = age => 1 + 0.62 * (1 - Math.exp(-age / 36));
 
 export const vicCauses = ['No load path', 'Span sag or tear', 'Overhang or bond yield', 'Compression yield'];
 
@@ -30,6 +35,11 @@ function buildGraph(runs, diameter, stiffness) {
       const b = points[i + 1] ?? (closed ? points[0] : points[i]);
       const incoming = Math.hypot(x - a[0], y - a[1], z - a[2]);
       const outgoing = Math.hypot(x - b[0], y - b[1], z - b[2]);
+      const dx = (x - a[0]) / (incoming || 1) + (b[0] - x) / (outgoing || 1);
+      const dy = (y - a[1]) / (incoming || 1) + (b[1] - y) / (outgoing || 1);
+      const dz = (z - a[2]) / (incoming || 1) + (b[2] - z) / (outgoing || 1);
+      const directionLength = Math.hypot(dx, dy, dz);
+      const tangent = directionLength > 0.0001 ? [dx / directionLength, dz / directionLength, -dy / directionLength] : [1, 0, 0];
       if (i) length += incoming;
       const beforeArea = edgeAreas?.[i > 0 ? i - 1 : (closed ? points.length - 1 : 0)] ?? 1;
       const afterArea = edgeAreas?.[i] ?? beforeArea;
@@ -45,7 +55,7 @@ function buildGraph(runs, diameter, stiffness) {
       const voxelZ = Math.floor(z / cell);
       const section = width * height * 0.88;
       const node = { x, y, z, time: times?.[i] ?? index * diameter / 25, index, length, run: ranges.length - 1,
-        width, height, span, ground, incoming: section * incoming / 2,
+        width, height, span, ground, tangent, incoming: section * incoming / 2,
         outgoing: section * outgoing / 2, contacts: [] };
       if (!ground) {
         let first;
@@ -213,7 +223,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
   const sag = new Float32Array(size);
   const loading = new Float32Array(size);
   const damage = new Float32Array(size);
-  const yieldStress = (610 + 6100 * stiffness ** 2.15) * factor;
+  const yieldStress = baseYield(stiffness) * factor;
   const modulus = (6500 + 110000 * stiffness ** 2) * factor;
   const capillary = 62 / diameter;
   const times = [nodes[0].time];
@@ -252,7 +262,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
       const b = after ? after.length - node.length + (right[i] < i ? node.perimeter : 0) : Infinity;
       const spanned = before && after && before !== after;
       const reach = spanned ? a + b : Math.min(a, b);
-      const aging = 1 + 0.62 * (1 - Math.exp(-Math.max(0, clock - node.time) / 36));
+      const aging = clayRecovery(Math.max(0, clock - node.time));
       const beamLength = spanned ? Math.sqrt(a * b) : reach;
       // Uniformly loaded beam, evaluated at the sample between its supports.
       const deflection = (spanned ? 0.15625 : 1.5) * weightGradient * reach ** 4 / (modulus * aging * node.height ** 2)
@@ -293,7 +303,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
       }
       if (node.ground) coverage = 1;
       const age = Math.max(0, clock - node.time);
-      const aging = 1 + 0.62 * (1 - Math.exp(-age / 36));
+      const aging = clayRecovery(age);
       const footprint = node.width * Math.max(diameter * 0.19, node.span) * Math.max(0.27, coverage);
       const stress = weightGradient * volume[i] / footprint;
       const lever = Math.hypot(momentX[i], momentY[i]) / volume[i];
@@ -330,7 +340,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
   const count = counts.at(-1);
   const endClock = times.at(-1);
   const stopped = endClock < ranges.at(-1).endTime || count < size;
-  for (let i = 1; i <= settlingChecks; i++) check({ count, clock: endClock + i * settlingStep, laidAt: endClock });
+  for (const time of settlingTimes) check({ count, clock: endClock + time, laidAt: endClock });
   const frames = times.length;
   return { failure, cause, peak, times: Float64Array.from(times), buildFrames, frames, stopped,
     firstFailure: firstFailure || frames, deposited: count };
@@ -347,35 +357,28 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
   const frames = schedule.frames - skipped;
   const times = new Float64Array(frames);
   const trajectory = new Float32Array(frames * count * 4);
-  const sections = new Uint8Array(frames * count * 2);
+  const sections = new Uint8Array(frames * count * 4);
   const position = new Float32Array(count * 3);
   const velocity = new Float32Array(count * 3);
+  const previousX = new Float32Array(count);
+  const previousY = new Float32Array(count);
   const previousZ = new Float32Array(count);
+  const inverseMass = new Float32Array(count);
   const amount = new Float64Array(count);
   const laidVolumes = new Float64Array(count);
   const exchange = new Float64Array(count);
   const level = new Float64Array(count);
+  const pressure = new Float64Array(count);
+  const localYield = new Float64Array(count);
   const impact = new Float64Array(count);
   const flatten = new Float64Array(count);
   const tears = new Uint16Array(count);
-  const flowYield = (610 + 6100 * stiffness ** 2.15) * factor;
-  const contacts = createVicContacts(nodes, diameter, position, previousZ, velocity, laidVolumes);
-  const step = 1 / 64;
-  const edges = [];
-
-  function addEdge(i, j, flows, joinsAt = -Infinity) {
-    const a = nodes[i];
-    const b = nodes[j];
-    const length = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-    edges.push({ a: i, b: j, length, rest: length, flows, joinsAt, torn: false });
-  }
-
-  for (const { start, end, closed, endTime } of ranges) {
-    for (let i = start; i < end - 1; i++) addEdge(i, i + 1, true);
-    if (closed) addEdge(end - 1, start, true, endTime);
-  }
+  const flowYield = baseYield(stiffness) * factor;
+  const filament = createVicFilament(nodes, ranges, stiffness);
+  const contacts = createVicContacts(nodes, diameter, position, previousZ, velocity, laidVolumes, filament.areaRatio);
+  const step = 1 / 128;
+  const creepRate = 2 + 6 * (1 - stiffness);
   for (const node of nodes) {
-    if (node.contacts[0]) addEdge(node.index, node.contacts[0].index);
     position.set([node.x, node.y, node.z], node.index * 3);
   }
 
@@ -388,91 +391,79 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       const laid = depositedVolume(node, ranges[node.run], active, laidAt);
       amount[i] += laid - laidVolumes[i];
       laidVolumes[i] = laid;
-      if (failure[i]) {
-        if (failure[i] === frame) {
-          const prior = node.contacts[0] && nodes[node.contacts[0].index];
-          velocity[p] = prior ? clamp((node.x - prior.x) * 6, -65, 65) : 0;
-          velocity[p + 1] = prior ? clamp((node.y - prior.y) * 6, -65, 65) : 0;
-        } else falling = true;
-        continue;
+      const released = Boolean(failure[i] && failure[i] < frame);
+      inverseMass[i] = released ? 1 / Math.max(0.04, amount[i]) : 0;
+      falling ||= released;
+      const age = Math.max(0, schedule.times[frame] - node.time);
+      localYield[i] = flowYield * clayRecovery(age);
+      if (!failure[i]) {
+        const wetTime = Math.min(elapsed, age);
+        position[p + 2] += (1 - Math.exp(-wetTime * creepRate)) * (Math.max(0, node.z - sag[i]) - position[p + 2]);
+        if (node.ground || node.contacts.length) {
+          const spread = clamp(loading[i] - 0.26, 0, 1) * (0.27 - 0.16 * stiffness);
+          flatten[i] += Math.max(0, spread - flatten[i]) * (1 - Math.exp(-wetTime * creepRate * 0.4));
+        }
       }
-      position[p + 2] += (1 - Math.exp(-elapsed * 7)) * (Math.max(0, node.z - sag[i]) - position[p + 2]);
     }
 
-    const iterations = Math.min(falling ? 8 : 3, Math.ceil(elapsed / step));
-    const delta = iterations ? Math.min(step, elapsed / iterations) : 0;
+    const iterations = falling ? Math.ceil(elapsed / step) : Math.min(4, Math.ceil(elapsed / 0.03));
+    const delta = iterations ? Math.min(falling ? step : 0.12, elapsed / iterations) : 0;
+    const drag = Math.exp(-delta * 3.4);
+    const pressureDecay = Math.exp(-delta * 9);
+    const flattenRate = 1 - Math.exp(-delta * (6.4 - 2.9 * stiffness));
     for (let iteration = 0; iteration < iterations; iteration++) {
-      for (let i = 0; i < active; i++) {
-        if (!failure[i] || failure[i] === frame) continue;
-        const p = i * 3;
-        previousZ[i] = position[p + 2];
-        velocity[p] *= 0.95;
-        velocity[p + 1] *= 0.95;
-        velocity[p + 2] = velocity[p + 2] * 0.97 - 9810 * delta;
-        position[p] += velocity[p] * delta;
-        position[p + 1] += velocity[p + 1] * delta;
-        position[p + 2] += velocity[p + 2] * delta;
-      }
-
-      for (const edge of edges) {
-        if (edge.torn || edge.joinsAt > laidAt || !failure[edge.a] || failure[edge.a] !== failure[edge.b] || edge.length < 0.0001) continue;
-        const a = edge.a * 3;
-        const b = edge.b * 3;
-        const dx = position[b] - position[a];
-        const dy = position[b + 1] - position[a + 1];
-        const dz = position[b + 2] - position[a + 2];
-        const length = Math.hypot(dx, dy, dz);
-        if (length > edge.length + Math.max(diameter * 0.18, edge.length * (edge.flows ? 0.8 - 0.3 * stiffness : 0.47))) {
-          edge.torn = true;
-          if (edge.flows) tears[edge.a] = frame;
-          continue;
-        }
-        if (length <= edge.rest * 0.67) continue;
         // Yielded strands retain some stretch after the load is removed.
-        edge.rest += Math.max(0, length - edge.rest * 1.12) * (0.04 + 0.14 * (1 - stiffness));
-        const correction = (length - edge.rest) / length * (0.13 + 0.22 * stiffness);
-        position[a] += dx * correction;
-        position[a + 1] += dy * correction;
-        position[a + 2] += dz * correction;
-        position[b] -= dx * correction;
-        position[b + 1] -= dy * correction;
-        position[b + 2] -= dz * correction;
-      }
-
       if (falling) {
-        contacts.rebuild(active, failure, amount, flatten, iteration > 0);
         for (let i = 0; i < active; i++) {
-          if (!failure[i] || failure[i] === frame) continue;
+          if (!inverseMass[i]) continue;
+          const p = i * 3;
+          previousX[i] = position[p];
+          previousY[i] = position[p + 1];
+          previousZ[i] = position[p + 2];
+          position[p] += velocity[p] * drag * delta;
+          position[p + 1] += velocity[p + 1] * drag * delta;
+          position[p + 2] += (velocity[p + 2] * drag - 9810 * delta) * delta;
+        }
+        filament.stretch(position, inverseMass, laidAt, delta, tears, frame);
+        filament.sectionLengths(position, failure, laidAt);
+        contacts.rebuild(active, inverseMass, amount, flatten, iteration > 0);
+        for (let i = 0; i < active; i++) {
+          if (!inverseMass[i]) continue;
+          const p = i * 3;
+          velocity[p] = (position[p] - previousX[i]) / delta;
+          velocity[p + 1] = (position[p + 1] - previousY[i]) / delta;
+          velocity[p + 2] = (position[p + 2] - previousZ[i]) / delta;
           const speed = contacts.settle(i);
-          const pressure = density * (speed / 1000) ** 2;
-          impact[i] = Math.max(impact[i], pressure);
-          flatten[i] = Math.min(0.49, flatten[i] + Math.max(0, pressure / flowYield - 0.46) * 0.14);
+          // Estimate the stopping stress from kinetic energy over the first
+          // portion of bead compression. Plastic flattening continues after contact.
+          impact[i] = Math.max(impact[i], 5.8 * density * (speed / 1000) ** 2);
+          const spread = clamp((impact[i] / localYield[i] - 0.24) * 0.33, 0, 0.64);
+          flatten[i] += Math.max(0, spread - flatten[i]) * flattenRate;
         }
       }
 
-      // Equal-and-opposite fluxes along unbroken bead edges conserve deposited volume.
-      // An impact can yield a clump and drive shear-thinning flow even when self-weight alone cannot.
+      // Pressure differences drive shear-thinning flow through wet connections.
+      // Each transfer removes exactly the volume added at its other end.
       exchange.fill(0);
       for (let i = 0; i < active; i++) {
         const node = nodes[i];
-        const area = laidVolumes[i] ? amount[i] / laidVolumes[i] : 0;
-        level[i] = position[3 * i + 2] + node.height * Math.sqrt(area) * (1 - flatten[i]);
-        impact[i] *= 0.72;
+        const area = laidVolumes[i] ? amount[i] / laidVolumes[i] * filament.areaRatio(i) : 0;
+        level[i] = position[3 * i + 2] + 0.5 * node.height * Math.sqrt(area) * (1 - flatten[i]);
+        pressure[i] = impact[i] + (failure[i] ? 0 : 0.52 * loading[i] * localYield[i]);
+        impact[i] *= pressureDecay;
       }
-      for (const edge of edges) {
-        const { a, b, length } = edge;
-        if (edge.torn || edge.joinsAt > laidAt || !edge.flows || !laidVolumes[a] || !laidVolumes[b]
-          || failure[a] !== failure[b] || length < 0.0001) continue;
-        const slope = (level[a] - level[b]) / Math.max(length, diameter * 0.15);
-        const pressure = (failure[a] ? impact[a] - impact[b] : 0.42 * (loading[a] - loading[b]) * flowYield);
-        const drive = weightGradient * diameter * slope + pressure;
-        const yielded = Math.max(0, Math.abs(drive) / flowYield - 1);
+      for (const { a, b, length, strand, torn, laidAt: birth } of filament.links) {
+        if (torn || birth > laidAt || !strand || !laidVolumes[a] || !laidVolumes[b]) continue;
+        const gradient = (weightGradient * (level[a] - level[b]) + pressure[a] - pressure[b]) / Math.max(length, diameter * 0.45);
+        const shear = gradient * diameter * 0.47;
+        const yieldLimit = 0.43 * (localYield[a] + localYield[b]) / 2;
+        const yielded = Math.max(0, Math.abs(shear) / yieldLimit - 1);
         if (yielded === 0) continue;
-        const donor = drive > 0 ? a : b;
-        const receiver = drive > 0 ? b : a;
+        const donor = shear > 0 ? a : b;
+        const receiver = shear > 0 ? b : a;
         const transfer = Math.max(0, Math.min(
-          laidVolumes[donor] * 0.048 * yielded ** (1 / 0.6),
-          (amount[donor] - 0.45 * laidVolumes[donor]) * 0.25,
+          laidVolumes[donor] * delta * creepRate * 0.7 * yielded ** (1 / 0.6),
+          (amount[donor] - 0.24 * laidVolumes[donor]) * 0.25,
           (1.92 * laidVolumes[receiver] - amount[receiver]) * 0.25,
         ));
         exchange[donor] -= transfer;
@@ -481,6 +472,7 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       for (let i = 0; i < active; i++) amount[i] += exchange[i];
     }
     if (frame < schedule.buildFrames && frame % stride) return;
+    if (falling) filament.sectionLengths(position, failure, laidAt, true);
     const replayFrame = frame < schedule.buildFrames ? frame / stride : frame - skipped;
     times[replayFrame] = schedule.times[frame];
     for (let i = 0; i < active; i++) {
@@ -491,9 +483,11 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       trajectory[base + 1] = position[p + 2] - node.z;
       trajectory[base + 2] = node.y - position[p + 1];
       trajectory[base + 3] = 1;
-      const section = (replayFrame * count + i) * 2;
-      sections[section] = laidVolumes[i] ? Math.round(127 * amount[i] / laidVolumes[i]) : 127;
+      const section = (replayFrame * count + i) * 4;
+      const area = laidVolumes[i] ? amount[i] / laidVolumes[i] * filament.areaRatio(i) : 1;
+      sections[section] = Math.round(127 * clamp(area, 0.05, 2));
       sections[section + 1] = Math.round(255 * (1 - flatten[i]));
+      if (falling) filament.writeDirection(i, sections, section + 2);
     }
   });
   for (let i = 0; i < count; i++) {
@@ -537,6 +531,7 @@ export function simulateVic(runs, { diameter, stiffness, gravity }) {
     votes, hotspots, totalCases: strengths.length, frames: demo.frames, buildFrames: demo.buildFrames, gravity,
     times: demo.times, stopped: demo.stopped, deposited: demo.deposited, trajectory: demo.trajectory, sections: demo.sections,
     centers: Float32Array.from(nodes.flatMap(node => [node.x, node.z, -node.y])),
+    tangents: Float32Array.from(nodes.flatMap(node => node.tangent)),
     failure: demo.failure, tears: demo.tears,
     firstFailure: demo.firstFailure, strength: strengths[chosen], held: 1 - failed / demo.deposited,
   };

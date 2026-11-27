@@ -28,8 +28,10 @@ export function createVicDisplay() {
       uniform float phase;
       uniform float frameCount;
       uniform bool timedDraw;
+      uniform float diameter;
       attribute float vicNode;
       attribute vec3 vicCenter;
+      attribute vec3 vicTangent;
       attribute float agreement;
       attribute float releaseFrame;
       varying float vAgreement;
@@ -44,8 +46,27 @@ export function createVicDisplay() {
         vec2 pixel = vec2(mod(index, atlas.x), floor(index / atlas.x));
         return (pixel + 0.5) / vec2(atlas.x, atlas.z);
       }
+      vec3 decodeTangent(vec2 packedDirection) {
+        if (packedDirection == vec2(0.0)) return vicTangent;
+        vec2 unfolded = (packedDirection * 255.0 - 128.0) / 127.0;
+        vec3 direction = vec3(unfolded, 1.0 - abs(unfolded.x) - abs(unfolded.y));
+        direction.xy -= max(0.0, -direction.z) * mix(vec2(-1.0), vec2(1.0), step(vec2(0.0), direction.xy));
+        return normalize(direction);
+      }
+      vec3 followTangent(vec3 vector, vec3 tangent) {
+        float alignment = dot(vicTangent, tangent);
+        if (alignment < -0.999) {
+          vec3 side = abs(vicTangent.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+          vec3 axis = normalize(cross(vicTangent, side));
+          return 2.0 * axis * dot(vector, axis) - vector;
+        }
+        vec3 axis = cross(vicTangent, tangent);
+        vec3 turn = cross(axis, vector);
+        return vector + turn + cross(axis, turn) / (1.0 + alignment);
+      }
       void main() {
         vec3 point = position;
+        vec3 surfaceNormal = normal;
         vPresent = 1.0;
         vReleased = 0.0;
         if (phase >= 0.0) {
@@ -54,19 +75,33 @@ export function createVicDisplay() {
           vec2 uvB = atlasUV(min(frame + 1.0, frameCount - 1.0));
           vec4 a = texture2D(motion, uvA);
           vec4 b = texture2D(motion, uvB);
-          vec2 before = mix(vec2(127.0 / 255.0, 1.0), texture2D(sections, uvA).rg, a.a);
+          vec4 first = texture2D(sections, uvA);
+          vec4 next = texture2D(sections, uvB);
+          vec2 before = mix(vec2(127.0 / 255.0, 1.0), first.rg, a.a);
           float animate = fract(phase) * a.a * b.a;
           if (releaseFrame > frame && releaseFrame <= frame + 1.0) animate = 0.0;
-          vec2 section = mix(before, texture2D(sections, uvB).rg, animate);
+          vec2 section = mix(before, next.rg, animate);
           float areaScale = sqrt(max(0.01, section.x * 255.0 / 127.0));
           float flatten = max(0.1, section.y);
-          point = vicCenter + (point - vicCenter) * vec3(areaScale / flatten, areaScale * flatten, areaScale / flatten);
-          point += mix(a.xyz, b.xyz, animate);
+          vec3 stretch = vec3(areaScale / flatten, areaScale * flatten, areaScale / flatten);
+          vec3 local = (point - vicCenter) * stretch;
+          surfaceNormal = normal / stretch;
+          if (first.ba != vec2(0.0) || next.ba != vec2(0.0)) {
+            vec3 tangent = mix(decodeTangent(first.ba), decodeTangent(next.ba), animate);
+            if (length(tangent) > 0.01) {
+              tangent = normalize(tangent);
+              vec3 pivot = vec3(0.0, diameter * 0.33 * stretch.y, 0.0);
+              local = pivot + followTangent(local - pivot, tangent);
+              surfaceNormal = followTangent(surfaceNormal, tangent);
+            }
+          }
+          point = vicCenter + local + mix(a.xyz, b.xyz, animate);
+          point.y = max(0.0, point.y);
           vPresent = timedDraw ? 1.0 : a.a;
           vReleased = step(0.5, releaseFrame) * step(releaseFrame, phase);
         }
         vAgreement = agreement;
-        vNormal = normalize(normalMatrix * normal);
+        vNormal = normalize(normalMatrix * surfaceNormal);
         vLocal = position;
         vHeight = point.y;
         vViewPoint = (modelViewMatrix * vec4(point, 1.0)).xyz;
@@ -167,18 +202,23 @@ export function createVicDisplay() {
     display.setIndex(new THREE.BufferAttribute(geometry.index.array.slice(), 1).setUsage(THREE.DynamicDrawUsage));
     if (!result.trajectory) return;
     const centers = new Float32Array(result.nodeIds.length * 3);
+    const tangents = new Float32Array(centers.length);
     for (let i = 0; i < result.nodeIds.length; i++) {
       const offset = result.nodeIds[i] * 3;
       centers[i * 3] = result.centers[offset];
       centers[i * 3 + 1] = result.centers[offset + 1];
       centers[i * 3 + 2] = result.centers[offset + 2];
+      tangents[i * 3] = result.tangents[offset];
+      tangents[i * 3 + 1] = result.tangents[offset + 1];
+      tangents[i * 3 + 2] = result.tangents[offset + 2];
     }
     display.setAttribute('vicCenter', new THREE.BufferAttribute(centers, 3));
+    display.setAttribute('vicTangent', new THREE.BufferAttribute(tangents, 3));
     display.setAttribute('releaseFrame', new THREE.BufferAttribute(Float32Array.from(result.nodeIds, id => result.failure[id]), 1));
     const width = Math.min(count, 2048);
     const height = Math.ceil(count * result.frames / width);
     texture = packTexture(result.trajectory, 4, THREE.RGBAFormat, THREE.FloatType);
-    sectionsTexture = packTexture(result.sections, 2, THREE.RGFormat, THREE.UnsignedByteType);
+    sectionsTexture = packTexture(result.sections, 4, THREE.RGBAFormat, THREE.UnsignedByteType);
     uniforms.motion.value = texture;
     uniforms.sections.value = sectionsTexture;
     uniforms.atlas.value.set(width, count, height);

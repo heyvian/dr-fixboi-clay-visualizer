@@ -14,9 +14,9 @@ self.addEventListener('message', ({ data }) => {
     const transfers = [mesh.positions.buffer, mesh.indices.buffer];
     if (mesh.replay) transfers.push(mesh.replay.times.buffer, mesh.replay.indexEnds.buffer);
     if (mesh.analysis) {
-      const { nodeIds, cuts, votes, trajectory, sections, centers, failure, times } = mesh.analysis;
+      const { nodeIds, cuts, votes, trajectory, sections, centers, tangents, failure, times } = mesh.analysis;
       transfers.push(nodeIds.buffer, cuts.buffer, votes.buffer);
-      if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer, failure.buffer, times.buffer);
+      if (trajectory) transfers.push(trajectory.buffer, sections.buffer, centers.buffer, tangents.buffer, failure.buffer, times.buffer);
       delete mesh.analysis.tears;
     }
     const motion = type === 'load' ? next.motionPoints : undefined;

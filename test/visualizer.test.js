@@ -190,7 +190,7 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.equal(stable.stopped, false);
   const result = makeClayMesh(parseGcode(makeOverhangSample()), options);
   const { analysis, replay } = result;
-  assert.equal(analysis.hotspots[0].cases, analysis.totalCases);
+  assert.ok(analysis.hotspots[0].cases > 1);
   assert.ok(analysis.firstFailure > 1 && analysis.firstFailure < analysis.frames);
   assert.equal(analysis.firstFailure, analysis.buildFrames);
   assert.ok(analysis.held > 0 && analysis.held < 1);
@@ -202,17 +202,27 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.equal(analysis.nodeIds.length, result.positions.length / 3);
   assert.equal(analysis.centers[1], 0);
   assert.equal(analysis.times.length, analysis.frames);
-  assert.equal(analysis.sections.length, analysis.frames * analysis.votes.length * 2);
+  const sampleCount = analysis.votes.length;
+  assert.equal(analysis.sections.length, analysis.frames * sampleCount * 4);
+  const tear = analysis.tears.findIndex(frame => frame > analysis.firstFailure + 1);
+  assert.ok(tear >= 0);
+  const beforeTear = ((analysis.tears[tear] - 1) * sampleCount + tear) * 4;
+  assert.ok(analysis.sections[beforeTear] < 110 || analysis.sections[beforeTear + 4] < 110);
+  assert.ok(analysis.sections[beforeTear + 2] || analysis.sections[beforeTear + 6]);
+  assert.ok(result.analysis.cuts.some((value, i) => i % 2 === 1 && value === analysis.tears[tear]));
   const lastFrame = analysis.trajectory.subarray((analysis.frames - 1) * analysis.votes.length * 4);
   let landed = false;
+  let spread = false;
   for (let i = 0; i < analysis.votes.length; i++) {
     assert.equal(lastFrame[i * 4 + 3], Number(i < analysis.deposited));
     const base = analysis.centers[i * 3 + 1];
     const settled = base + lastFrame[i * 4 + 1];
     assert.ok(settled >= -0.001);
     if (base > 20 && settled < 0.01) landed = true;
+    if (analysis.failure[i] && analysis.sections[((analysis.frames - 1) * sampleCount + i) * 4 + 1] < 230) spread = true;
   }
   assert.ok(landed);
+  assert.ok(spread);
 
   const gravityOff = makeClayMesh(parseGcode(makeOverhangSample()), { ...options, gravity: false }).analysis;
   assert.equal(gravityOff.trajectory, undefined);

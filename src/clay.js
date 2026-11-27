@@ -354,14 +354,8 @@ export function makeClayMesh(model, options) {
     for (let i = 0; i < joins; i++) {
       const ring = startRing + i * sides;
       const following = startRing + ((i + 1) % path.length) * sides;
-      const failure = analysis?.failure;
-      if (failure) {
-        const a = failure[firstNode + i];
-        const b = failure[firstNode + (i + 1) % path.length];
-        const separation = a !== b ? Math.min(a || Infinity, b || Infinity) : Infinity;
-        const when = Math.min(separation, analysis.tears[firstNode + i] || Infinity);
-        if (Number.isFinite(when)) cuts.push(face, when);
-      }
+      const tear = analysis?.tears?.[firstNode + i];
+      if (tear) cuts.push(face, tear);
       for (let j = 0; j < sides; j++) {
         const next = (j + 1) % sides;
         indices.set([ring + j, ring + next, following + j, ring + next, following + next, following + j], face);

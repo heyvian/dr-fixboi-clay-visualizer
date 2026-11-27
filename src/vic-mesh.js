@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three';
-import { writeBeadStrip, writeRingCap } from './bead-mesh.js';
+import { tearTipCenter, writeBeadStrip, writeRingCap, writeTearCap } from './bead-mesh.js';
 import { depositedIndexCount } from './toolpath.js';
 
 export function bakeVicCollapse({ positions, indices, analysis, replay }, stripRanges) {
@@ -14,9 +14,11 @@ export function bakeVicCollapse({ positions, indices, analysis, replay }, stripR
   const starts = new Int32Array(nodeCount).fill(-1);
   const incoming = new Uint8Array(nodeCount);
   const outgoing = new Uint8Array(nodeCount);
+  const tornEnds = new Uint8Array(nodeCount);
   const span = new Float32Array(nodeCount);
   const strips = [];
   const torn = new Set();
+  let tipCount = 0;
   for (let i = 0; i < analysis.cuts.length; i += 2) {
     if (analysis.cuts[i + 1] <= frame) torn.add(analysis.cuts[i]);
   }
@@ -36,7 +38,12 @@ export function bakeVicCollapse({ positions, indices, analysis, replay }, stripR
         centers[a * 3 + 2] - centers[b * 3 + 2]);
       span[a] += length / 2;
       span[b] += length / 2;
-      if (torn.has(strip)) continue;
+      if (torn.has(strip)) {
+        tornEnds[a] |= 2;
+        tornEnds[b] |= 1;
+        tipCount += 2;
+        continue;
+      }
       outgoing[a] = 1;
       incoming[b] = 1;
       strips.push(a, b);
@@ -54,8 +61,8 @@ export function bakeVicCollapse({ positions, indices, analysis, replay }, stripR
   }
   if (!rings) return undefined;
 
-  const bakedPositions = new Float32Array((rings + isolated) * sides * 3);
-  const bakedIndices = new Uint32Array((strips.length / 2 + isolated) * stripLength + caps * (sides - 2) * 3);
+  const bakedPositions = new Float32Array(((rings + isolated) * sides + tipCount) * 3);
+  const bakedIndices = new Uint32Array((strips.length / 2 + isolated) * stripLength + caps * (sides - 2) * 3 + tipCount * 6);
   const ends = new Uint32Array(nodeCount);
   const rotation = new Quaternion();
   const rest = new Vector3();
@@ -86,15 +93,17 @@ export function bakeVicCollapse({ positions, indices, analysis, replay }, stripR
         rotation.set(point.x, point.y, point.z, 0);
       } else rotation.setFromUnitVectors(rest, tangent);
     }
-    for (let j = 0; j < sides; j++) {
-      const index = (source + j) * 3;
-      point.set((positions[index] - cx) * widthScale, (positions[index + 1] - cy) * heightScale - pivot,
-        (positions[index + 2] - cz) * widthScale);
+    function writePoint(x, y, z, vertexIndex) {
+      point.set((x - cx) * widthScale, (y - cy) * heightScale - pivot, (z - cz) * widthScale);
       if (bend) point.applyQuaternion(rotation);
-      const target = (vertex + j) * 3;
+      const target = vertexIndex * 3;
       bakedPositions[target] = cx + point.x + trajectory[section];
       bakedPositions[target + 1] = Math.max(0, cy + point.y + pivot + trajectory[section + 1]);
       bakedPositions[target + 2] = cz + point.z + trajectory[section + 2];
+    }
+    for (let j = 0; j < sides; j++) {
+      const index = (source + j) * 3;
+      writePoint(positions[index], positions[index + 1], positions[index + 2], vertex + j);
     }
 
     // A section cut at both ends still represents a finite length of deposited clay.
@@ -119,10 +128,18 @@ export function bakeVicCollapse({ positions, indices, analysis, replay }, stripR
       }
       face = writeBeadStrip(bakedIndices, face, vertex, endRing, sides);
     }
-    if (!incoming[node]) face = writeRingCap(bakedIndices, face, vertex, sides, true);
-    if (!outgoing[node]) face = writeRingCap(bakedIndices, face, endRing, sides, false);
     ends[node] = vertex;
+    const startRing = vertex;
     vertex = endRing + sides;
+    for (const reverse of [true, false]) {
+      if (reverse ? incoming[node] : outgoing[node]) continue;
+      const ring = reverse ? startRing : endRing;
+      if (tornEnds[node] & (reverse ? 1 : 2)) {
+        const [x, y, z] = tearTipCenter(positions, source, sides, tangents, node, diameter, reverse);
+        writePoint(x, y, z, vertex);
+        face = writeTearCap(bakedIndices, face, ring, sides, vertex++, reverse);
+      } else face = writeRingCap(bakedIndices, face, ring, sides, reverse);
+    }
   }
   for (let i = 0; i < strips.length; i += 2) {
     face = writeBeadStrip(bakedIndices, face, ends[strips[i]], ends[strips[i + 1]], sides);

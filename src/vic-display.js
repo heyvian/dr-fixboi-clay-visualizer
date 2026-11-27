@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { writeRingCap } from './bead-mesh.js';
+import { tearTipCenter, writeTearCap } from './bead-mesh.js';
 import { depositedIndexCount } from './toolpath.js';
 
 export const vicColors = ['#799b93', '#f5c451', '#ff743f', '#f73564'];
@@ -174,6 +174,7 @@ export function createVicDisplay() {
   let source;
   let toolpath;
   let lastFrame = -2;
+  let firstTip = 0;
   let texture;
   let sectionsTexture;
 
@@ -194,18 +195,46 @@ export function createVicDisplay() {
     const display = new THREE.BufferGeometry();
     mesh.geometry = display;
     if (!result) return;
-    display.setAttribute('position', geometry.getAttribute('position'));
-    display.setAttribute('normal', geometry.getAttribute('normal'));
-    display.setAttribute('vicNode', new THREE.BufferAttribute(result.nodeIds, 1));
+    let position = geometry.getAttribute('position');
+    let normal = geometry.getAttribute('normal');
+    let nodeIds = result.nodeIds;
+    firstTip = position.count;
+    if (result.cuts.length) {
+      const base = position.array;
+      const vertices = firstTip + result.cuts.length;
+      const extended = new Float32Array(vertices * 3);
+      const normals = new Float32Array(extended.length);
+      nodeIds = new Float32Array(vertices);
+      extended.set(base);
+      normals.set(normal.array);
+      nodeIds.set(result.nodeIds);
+      const sides = result.stripLength / 6;
+      for (let i = 0; i < result.cuts.length; i += 2) {
+        const strip = result.cuts[i];
+        for (const reverse of [false, true]) {
+          const ring = geometry.index.array[strip + (reverse ? 2 : 0)];
+          const node = nodeIds[ring];
+          const tip = firstTip + i + Number(reverse);
+          extended.set(tearTipCenter(base, ring, sides, result.tangents, node, result.diameter, reverse), tip * 3);
+          for (let axis = 0; axis < 3; axis++) normals[tip * 3 + axis] = result.tangents[node * 3 + axis] * (reverse ? -1 : 1);
+          nodeIds[tip] = node;
+        }
+      }
+      position = new THREE.BufferAttribute(extended, 3);
+      normal = new THREE.BufferAttribute(normals, 3);
+    }
+    display.setAttribute('position', position);
+    display.setAttribute('normal', normal);
+    display.setAttribute('vicNode', new THREE.BufferAttribute(nodeIds, 1));
     const count = result.votes.length;
-    const agreement = Float32Array.from(result.nodeIds, id => result.votes[id] / result.totalCases);
+    const agreement = Float32Array.from(nodeIds, id => result.votes[id] / result.totalCases);
     display.setAttribute('agreement', new THREE.BufferAttribute(agreement, 1));
     display.setIndex(new THREE.BufferAttribute(geometry.index.array.slice(), 1).setUsage(THREE.DynamicDrawUsage));
     if (!result.trajectory) return;
-    const centers = new Float32Array(result.nodeIds.length * 3);
+    const centers = new Float32Array(nodeIds.length * 3);
     const tangents = new Float32Array(centers.length);
-    for (let i = 0; i < result.nodeIds.length; i++) {
-      const offset = result.nodeIds[i] * 3;
+    for (let i = 0; i < nodeIds.length; i++) {
+      const offset = nodeIds[i] * 3;
       centers[i * 3] = result.centers[offset];
       centers[i * 3 + 1] = result.centers[offset + 1];
       centers[i * 3 + 2] = result.centers[offset + 2];
@@ -215,7 +244,7 @@ export function createVicDisplay() {
     }
     display.setAttribute('vicCenter', new THREE.BufferAttribute(centers, 3));
     display.setAttribute('vicTangent', new THREE.BufferAttribute(tangents, 3));
-    display.setAttribute('releaseFrame', new THREE.BufferAttribute(Float32Array.from(result.nodeIds, id => result.failure[id]), 1));
+    display.setAttribute('releaseFrame', new THREE.BufferAttribute(Float32Array.from(nodeIds, id => result.failure[id]), 1));
     const width = Math.min(count, 2048);
     const height = Math.ceil(count * result.frames / width);
     texture = packTexture(result.trajectory, 4, THREE.RGBAFormat, THREE.FloatType);
@@ -266,9 +295,8 @@ export function createVicDisplay() {
         const before = original[start];
         const after = original[start + 2];
         const sides = stripLength / 6;
-        target.array.fill(before, start, start + stripLength);
-        const next = writeRingCap(target.array, start, before, sides, false);
-        writeRingCap(target.array, next, after, sides, true);
+        const next = writeTearCap(target.array, start, before, sides, firstTip + i, false);
+        writeTearCap(target.array, next, after, sides, firstTip + i + 1, true);
       }
       else if (frame < at && lastFrame >= at) target.array.set(original.subarray(start, start + stripLength), start);
     }

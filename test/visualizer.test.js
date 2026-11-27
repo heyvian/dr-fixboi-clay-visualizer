@@ -208,6 +208,20 @@ test('VIC keeps a short vertical wall standing and demonstrates a failed overhan
   assert.equal(analysis.sections.length, analysis.frames * sampleCount * 4);
   const tear = analysis.tears.findIndex(frame => frame > analysis.firstFailure + 1);
   assert.ok(tear >= 0);
+  let previousTear = -1;
+  for (let i = 0; i < analysis.deposited; i++) {
+    if (!analysis.tears[i]) continue;
+    if (previousTear >= 0 && analysis.centers[i * 3 + 1] === analysis.centers[previousTear * 3 + 1]) {
+      let span = 0;
+      for (let j = previousTear + 1; j <= i; j++) {
+        const current = j * 3;
+        span += Math.hypot(analysis.centers[current] - analysis.centers[current - 3],
+          analysis.centers[current + 2] - analysis.centers[current - 1]);
+      }
+      assert.ok(span >= 6.9, 'neighboring tears must leave a connected strand');
+    }
+    previousTear = i;
+  }
   const beforeTear = ((analysis.tears[tear] - 1) * sampleCount + tear) * 4;
   assert.ok(analysis.sections[beforeTear] < 110 || analysis.sections[beforeTear + 4] < 110);
   assert.ok(analysis.sections[beforeTear + 2] || analysis.sections[beforeTear + 6]);

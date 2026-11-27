@@ -1,5 +1,6 @@
 import { createVicContacts } from './vic-contact.js';
 import { createVicFilament } from './vic-filament.js';
+import { clayRecovery, postYieldRate, vicMaterial } from './vic-rheology.js';
 
 const depositionChecks = 96;
 const settlingTimes = [
@@ -11,8 +12,6 @@ const density = 1850;
 // Conversion from millimeters to meters in stress and beam equations.
 const weightGradient = density * 9.81 / 1000;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-const baseYield = stiffness => 610 + 6100 * stiffness ** 2.15;
-const clayRecovery = age => 1 + 0.62 * (1 - Math.exp(-age / 36));
 
 export const vicCauses = ['No load path', 'Span sag or tear', 'Overhang or bond yield', 'Compression yield'];
 
@@ -244,8 +243,7 @@ function solveLoads(graph, diameter, stiffness, factor, onStep) {
   const loading = new Float32Array(size);
   const damage = new Float32Array(size);
   const seatedOnBed = new Uint8Array(size);
-  const yieldStress = baseYield(stiffness) * factor;
-  const modulus = (6500 + 110000 * stiffness ** 2) * factor;
+  const { yieldStress, modulus } = vicMaterial(stiffness, factor);
   const capillary = 62 / diameter;
   const times = [nodes[0].time];
   const counts = [0];
@@ -454,8 +452,8 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
   const impact = new Float64Array(count);
   const flatten = new Float64Array(count);
   const tears = new Uint16Array(count);
-  const flowYield = baseYield(stiffness) * factor;
-  const filament = createVicFilament(nodes, ranges, stiffness);
+  const material = vicMaterial(stiffness, factor);
+  const filament = createVicFilament(nodes, ranges, diameter, stiffness, material);
   const contacts = createVicContacts(nodes, diameter, position, previousZ, velocity, laidVolumes, filament.areaRatio);
   const step = 1 / 128;
   const creepRate = 2 + 6 * (1 - stiffness);
@@ -485,7 +483,7 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
       if (moving) movers.push(i);
       if (failure[i] === frame) moveUntil = clock + 0.8;
       const age = Math.max(0, clock - node.time);
-      localYield[i] = flowYield * clayRecovery(age);
+      localYield[i] = material.yieldStress * clayRecovery(age);
       if (!failure[i]) {
         const wetTime = Math.min(elapsed, age);
         position[p + 2] += (1 - Math.exp(-wetTime * creepRate)) * (Math.max(0, node.z - sag[i]) - position[p + 2]);
@@ -517,7 +515,7 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
           position[p + 1] += velocity[p + 1] * drag * delta;
           position[p + 2] += (velocity[p + 2] * drag - 9810 * delta) * delta;
         }
-        filament.stretch(position, inverseMass, laidAt, delta, tears, frame, movingLinks);
+        filament.stretch(position, inverseMass, laidAt, clock - motionTime + delta * (iteration + 1), delta, tears, frame, movingLinks);
         filament.sectionLengths(position, failure, laidAt, false, iteration ? movingLinks : undefined);
         contacts.rebuild(active, inverseMass, amount, flatten, iteration > 0, movers);
         for (const i of movers) {
@@ -552,13 +550,14 @@ function captureMotion(graph, diameter, stiffness, factor, schedule) {
         if (torn || birth > laidAt || !strand || !laidVolumes[a] || !laidVolumes[b]) continue;
         const gradient = (weightGradient * (level[a] - level[b]) + pressure[a] - pressure[b]) / Math.max(length, diameter * 0.45);
         const shear = gradient * diameter * 0.47;
-        const yieldLimit = 0.43 * (localYield[a] + localYield[b]) / 2;
-        const yielded = Math.max(0, Math.abs(shear) / yieldLimit - 1);
-        if (yielded === 0) continue;
+        const recovery = (localYield[a] + localYield[b]) / (2 * material.yieldStress);
+        const yieldLimit = 0.43 * material.yieldStress * recovery;
+        if (Math.abs(shear) <= yieldLimit) continue;
+        const rate = postYieldRate(Math.abs(shear), yieldLimit, material.consistency * recovery, material.flowIndex);
         const donor = shear > 0 ? a : b;
         const receiver = shear > 0 ? b : a;
         const transfer = Math.max(0, Math.min(
-          laidVolumes[donor] * flowTime * creepRate * 0.7 * yielded ** (1 / 0.6),
+          laidVolumes[donor] * flowTime * 0.65 * rate,
           (amount[donor] - 0.24 * laidVolumes[donor]) * 0.25,
           (1.92 * laidVolumes[receiver] - amount[receiver]) * 0.25,
         ));

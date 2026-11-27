@@ -572,6 +572,7 @@ a:hover { color: #291437; }
 .simulation-choices span { padding-inline: .15rem; }
 .vic-panel { margin-top: .9rem; border-top: 1px solid #d9c8e4; padding-top: .75rem; }
 .vic-panel h3 { margin: 0; font: 700 .79rem var(--mono); text-transform: uppercase; }
+.vic-notice { margin: .65rem 0; padding: .45rem .6rem; border-left: 3px solid #b82165; background: #f9e2ef; color: var(--ink); font-size: .82rem; line-height: 1.4; }
 .vic-legend { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .3rem; font: 500 .73rem var(--mono); }
 .vic-legend span { display: flex; align-items: center; gap: .28rem; }
 .vic-legend i { width: .65rem; height: .65rem; border: 1px solid var(--ink); flex: none; }

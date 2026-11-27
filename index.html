@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index--jSrIc5V.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-CuQWjLi5.css">
+    <script type="module" crossorigin src="./pages-assets/index-qV4drQYA.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-DmSO6CJm.css">
   </head>
   <body>
     <div class="top-bar">
@@ -243,9 +243,10 @@
           </fieldset>
           <fieldset aria-describedby="fawn-format-note">
             <legend class="setting-label">File format</legend>
-            <div class="quality-choices">
+            <div class="quality-choices fawn-formats">
               <label><input type="radio" name="fawnFormat" value="stl" checked><span>STL</span></label>
               <label><input type="radio" name="fawnFormat" value="step"><span>STEP</span></label>
+              <label><input type="radio" name="fawnFormat" value="obj"><span>OBJ</span></label>
             </div>
             <p id="fawn-format-note" class="setting-note"></p>
           </fieldset>
@@ -274,7 +275,7 @@
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
         <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail.</p>
-        <p><strong>Export with FAWN.</strong> Choose Pre-fired for the as-printed size or Fired to apply the selected clay body’s shrinkage. Download the complete form as STL for slicing or as faceted STEP for compatible CAD apps. The file uses millimeters, with the model’s base at Z0.</p>
+        <p><strong>Export with FAWN.</strong> Choose Pre-fired for the as-printed size or Fired to apply the selected clay body’s shrinkage. Choose STL for slicing, faceted STEP for compatible CAD apps, or OBJ for a textured mesh. Unzip the OBJ package and keep its material and PNG maps beside the model. Geometry uses millimeters, with the base at Z0.</p>
         <p>Your G-code stays on this device, and your browser remembers your settings.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
       </div>
@@ -286,6 +287,7 @@
         <h3>Libraries and type</h3>
         <ul>
           <li>Three.js and its add-ons power the WebGL preview, orbit controls, studio rendering, and STL export. <a href="https://threejs.org/" target="_blank" rel="noopener noreferrer">Three.js</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/three.txt">MIT license</a></li>
+          <li>fflate packages the OBJ and its textures into a ZIP. <a href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener noreferrer">fflate</a> · <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/fflate.txt">MIT license</a></li>
           <li>Vite builds the site and bundles the simulation worker. <a href="https://vite.dev/" target="_blank" rel="noopener noreferrer">Vite</a> · <a href="https://github.com/vitejs/vite/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">MIT license</a></li>
           <li>Fontsource packages Archivo Black by the Archivo Black Project Authors (Omnibus-Type), DM Sans by the DM Sans Project Authors, and IBM Plex Mono by IBM. <a href="https://fontsource.org/" target="_blank" rel="noopener noreferrer">Fontsource</a> · SIL Open Font License 1.1 for <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/archivo-black.txt">Archivo Black</a>, <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/dm-sans.txt">DM Sans</a>, and <a href="https://heyvian.github.io/dr-fixboi-clay-visualizer/pages-assets/licenses/ibm-plex-mono.txt">IBM Plex Mono</a></li>
         </ul>

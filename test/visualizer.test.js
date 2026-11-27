@@ -10,6 +10,7 @@ import { createVicContacts } from '../src/vic-contact.js';
 import { getOriginPlacement } from '../src/origin-guide.js';
 import { depositedIndexCount, nozzlePosition } from '../src/toolpath.js';
 import { exportClayModel } from '../src/fawn-export.js';
+import { strFromU8, unzipSync } from 'three/addons/libs/fflate.module.js';
 
 test('draws deposited moves and restarts a bead after travel and retraction', () => {
   const { paths, inferExtrusion, extrusion } = parseGcode(`
@@ -405,6 +406,30 @@ test('PSH Dark Granite uses the published total cone 6 shrinkage', () => {
   assert.equal(firedScale(clayBodies.darkGranite), 0.875);
 });
 
+test('FAWN bundles UV-mapped OBJ geometry with its clay material and PNG maps', async () => {
+  const positions = new Float32Array([1, 15, 2, 3, 15, 2, 1, 19, 2, 1, 15, 5]);
+  const indices = new Uint32Array([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+  const file = exportClayModel({ positions, indices, format: 'obj', scale: 0.5, finish: clayBodies.darkGranite.fired });
+  const entries = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  const obj = strFromU8(entries['clay.obj']);
+  const mtl = strFromU8(entries['clay.mtl']);
+  assert.match(obj, /^mtllib clay\.mtl$/m);
+  assert.match(obj, /^v 0\.500000 -1\.000000 0\.000000$/m);
+  assert.match(obj, /^vt /m);
+  assert.match(obj, /^vn /m);
+  assert.match(obj, /^f 1\/\d+\/1 3\/\d+\/3 2\/\d+\/2$/m);
+  assert.match(mtl, /^map_Kd clay-color\.png$/m);
+  assert.match(mtl, /^map_Pr clay-roughness\.png$/m);
+  assert.match(mtl, /^map_Bump clay-normal\.png$/m);
+  for (const channel of ['color', 'roughness', 'normal', 'bump']) {
+    const bytes = entries['clay-' + channel + '.png'];
+    assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+    const dimensions = new DataView(bytes.buffer, bytes.byteOffset);
+    assert.equal(dimensions.getUint32(16), 1024);
+    assert.equal(dimensions.getUint32(20), 1024);
+  }
+});
+
 test('restores saved controls and uses Fast for a first visit', () => {
   const settings = normalizeSettings();
   assert.equal(settings.nozzle, 4);
@@ -414,6 +439,7 @@ test('restores saved controls and uses Fast for a first visit', () => {
   assert.equal(settings.renderQuality, 'low');
   assert.equal(settings.fawnStage, 'pre-fired');
   assert.equal(settings.fawnFormat, 'stl');
+  assert.equal(normalizeSettings({ fawnFormat: 'obj' }).fawnFormat, 'obj');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
     body: 'm390', finish: 'fired', rendering: true, renderQuality: 'high', drafting: true, comparing: true,

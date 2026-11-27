@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, Mesh } from 'three';
 import { STLExporter } from 'three/addons/exporters/STLExporter.js';
+import { exportTexturedObj } from './fawn-obj.js';
 
 function printCoordinates(positions, scale) {
   let bottom = Infinity;
@@ -66,7 +67,7 @@ function exportStep(points, indices) {
   return new Blob(parts, { type: 'model/step' });
 }
 
-export function exportClayModel({ positions, indices, format, scale }) {
+export function exportClayModel({ positions, indices, format, scale, finish }) {
   if (!positions.length || !indices.length || !Number.isFinite(scale) || scale <= 0) {
     throw new Error('A generated clay model is required to export.');
   }
@@ -75,6 +76,7 @@ export function exportClayModel({ positions, indices, format, scale }) {
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(points, 3));
   geometry.setIndex(new BufferAttribute(indices, 1));
+  if (format === 'obj') return exportTexturedObj(geometry, finish, scale);
   const data = new STLExporter().parse(new Mesh(geometry), { binary: true });
   return new Blob([data], { type: 'model/stl' });
 }

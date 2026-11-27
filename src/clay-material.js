@@ -1,6 +1,8 @@
 import { Color, DoubleSide, MeshPhysicalMaterial } from 'three';
 import { surfaceBumpShader } from './surface-bump.js';
 
+export const clayFrequencies = { grain: 1.8, variation: 0.12, fleck: 1.15, aggregate: 0.52, pores: 5.4, grit: 10.8 };
+
 const claySurface = `
 varying vec3 vClayPosition;
 uniform float uClayGrain;
@@ -40,10 +42,10 @@ float clayDetailVisibility(vec3 point) {
 
 const applyClayColor = `
 #include <color_fragment>
-vec3 grainPoint = vClayPosition * 1.8;
+vec3 grainPoint = vClayPosition * ${clayFrequencies.grain};
 float grain = (clayNoise(grainPoint) - 0.5) * clayDetailVisibility(grainPoint);
-float variation = clayNoise(vClayPosition * 0.12) - 0.5;
-vec3 fleckPoint = vClayPosition * 1.15;
+float variation = clayNoise(vClayPosition * ${clayFrequencies.variation}) - 0.5;
+vec3 fleckPoint = vClayPosition * ${clayFrequencies.fleck};
 vec3 fleckCell = floor(fleckPoint);
 float occupied = step(1.0 - uFleckDensity, clayHash(fleckCell + 19.0));
 vec3 fleckCenter = 0.26 + 0.48 * vec3(
@@ -58,12 +60,12 @@ float bump = grain + 0.22 * variation;
 float surfaceRoughness = grain * 2.4;
 float clayTone = variation * 2.0 + grain * 2.7;
 #ifdef HIGH_SURFACE_DETAIL
-  vec3 aggregatePoint = vClayPosition * 0.52;
+  vec3 aggregatePoint = vClayPosition * ${clayFrequencies.aggregate};
   float aggregate = clayNoise(aggregatePoint) - 0.5;
-  vec3 porePoint = vClayPosition * 5.4;
+  vec3 porePoint = vClayPosition * ${clayFrequencies.pores};
   float pores = smoothstep(0.12, 0.32, clayNoise(porePoint)) - 1.0;
   pores *= clayDetailVisibility(porePoint);
-  vec3 gritPoint = vClayPosition * 10.8;
+  vec3 gritPoint = vClayPosition * ${clayFrequencies.grit};
   float grit = (clayNoise(gritPoint) - 0.5) * clayDetailVisibility(gritPoint);
   bump += 0.28 * aggregate + 0.32 * pores + 0.11 * grit;
   surfaceRoughness += 0.80 * aggregate - 0.70 * pores + 0.35 * grit;

@@ -21,13 +21,17 @@ export function setupFawnPanel(settings) {
 
   function refresh() {
     button.disabled = !current || busy || exporting;
-    button.textContent = exporting ? 'Preparing file…' : 'Download ' + settings.fawnFormat.toUpperCase();
+    const label = settings.fawnFormat === 'obj' ? 'OBJ ZIP' : settings.fawnFormat.toUpperCase();
+    button.textContent = exporting ? 'Preparing file…' : 'Download ' + label;
     dimensions.textContent = current
       ? current.size.map(length => formatLength(length * scale())).join(' × ') + ' mm'
       : 'Load a model to export.';
-    formatNote.textContent = settings.fawnFormat === 'step'
-      ? 'Faceted STEP (AP242). Requires a CAD app that supports tessellated STEP.'
-      : 'Binary STL in millimeters. Merge intersecting beads in your slicer if needed.';
+    const notes = {
+      stl: 'Binary STL in millimeters. Merge intersecting beads in your slicer if needed.',
+      step: 'Faceted STEP (AP242). Requires a CAD app that supports tessellated STEP.',
+      obj: 'Unzip before opening the OBJ. Includes material, color, roughness, normal, and bump maps.',
+    };
+    formatNote.textContent = notes[settings.fawnFormat];
   }
 
   form.addEventListener('change', () => {
@@ -45,7 +49,7 @@ export function setupFawnPanel(settings) {
     const { positions, indices, name } = current;
     const { fawnFormat: format, fawnStage: stage } = settings;
     const stem = name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 96) || 'clay-model';
-    const filename = stem + '-' + stage + '.' + format;
+    const filename = stem + '-' + stage + (format === 'obj' ? '-obj.zip' : '.' + format);
     exporting = true;
     status.textContent = '';
     refresh();
@@ -76,7 +80,8 @@ export function setupFawnPanel(settings) {
         setTimeout(() => URL.revokeObjectURL(url), 30_000);
         finish('Download started.');
       }, { once: true });
-      worker.postMessage({ positions, indices, format, scale: scale() });
+      const body = clayBodies[settings.body];
+      worker.postMessage({ positions, indices, format, scale: scale(), finish: body[stage === 'fired' ? 'fired' : 'greenware'] });
     } catch {
       finish('Could not prepare the file. Try exporting again.');
     }

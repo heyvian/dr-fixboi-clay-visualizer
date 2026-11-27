@@ -12,7 +12,7 @@ rmSync(publishedAssets, { recursive: true, force: true });
 cpSync(builtAssets, publishedAssets, { recursive: true });
 
 const licenses = new URL('licenses/', publishedAssets);
-mkdirSync(licenses);
+mkdirSync(licenses, { recursive: true });
 for (const packageName of ['three', '@fontsource/archivo-black', '@fontsource/dm-sans', '@fontsource/ibm-plex-mono']) {
   const filename = packageName.split('/').at(-1) + '.txt';
   copyFileSync(new URL(`../node_modules/${packageName}/LICENSE`, import.meta.url), new URL(filename, licenses));

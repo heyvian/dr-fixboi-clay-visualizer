@@ -648,8 +648,8 @@ a:hover { color: #291437; }
 .size-comparison tbody { border-block: 1px solid #d8c9e3; }
 .size-comparison tr.current-stage { background: #f0e6fb; }
 .size-overlay { width: fit-content; margin-top: .55rem; }
-.fawn-bar { background: var(--lavender); flex-wrap: wrap; gap: .35rem 1rem; }
-.fawn-bar span { font: 500 .75rem var(--mono); }
+.fawn-bar { background: var(--lavender); }
+.fawn-name { grid-column: 1 / -1; margin: 0; font: 500 .875rem/1.4 var(--mono); }
 .fawn-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .fawn-body legend { padding: 0; }
 .fawn-formats { grid-template-columns: repeat(3, minmax(0, 1fr)); }

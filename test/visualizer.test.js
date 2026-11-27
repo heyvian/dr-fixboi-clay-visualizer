@@ -183,11 +183,13 @@ test('the origin guide uses the clay radius and true XY bearing and distance', (
 test('VIC keeps a short vertical wall standing and demonstrates a failed overhang', () => {
   const options = { nozzle: 4, viscosity: 65, gravity: true, quality: 'vic' };
   const wall = Array.from({ length: 12 }, (_, i) => 'G0 Y0 Z' + (1 + 2.5 * i) + '\nG1 Y50 E10').join('\n');
-  const stable = makeClayMesh(parseGcode('M83\n' + wall), options).analysis;
+  const stableMesh = makeClayMesh(parseGcode('M83\n' + wall), options);
+  const stable = stableMesh.analysis;
   assert.equal(stable.held, 1);
   assert.equal(stable.hotspots.length, 0);
   assert.equal(stable.deposited, stable.votes.length);
   assert.equal(stable.stopped, false);
+  assert.equal(stableMesh.collapse, undefined);
   const result = makeClayMesh(parseGcode(makeOverhangSample()), options);
   const { analysis, replay } = result;
   assert.ok(analysis.hotspots[0].cases > 1);
@@ -452,6 +454,51 @@ test('FAWN exports indexed clay in millimeters, Z-up, and scaled for firing', as
   assert.match(step, /TRIANGULATED_SURFACE_SET\('',#16,4,\(\),\(\),\(\n\(1,3,2\)/);
 });
 
+test('FAWN bakes and caps the settled VIC geometry through the deposition cutoff', async () => {
+  const options = { nozzle: 4, viscosity: 28, gravity: true, quality: 'vic' };
+  const model = parseGcode(makeOverhangSample());
+  const { collapse, analysis, positions, indices } = makeClayMesh(model, options);
+  assert.ok(analysis.stopped && analysis.tears.some(Boolean));
+  assert.ok(collapse.positions.length < positions.length);
+  assert.ok(collapse.indices.length < indices.length);
+  assert.ok(collapse.size[2] < 35);
+  assert.ok(collapse.positions.every(Number.isFinite));
+
+  const edgeCounts = new Map();
+  const count = collapse.positions.length / 3;
+  for (let i = 0; i < collapse.indices.length; i += 3) {
+    for (let edge = 0; edge < 3; edge++) {
+      const a = collapse.indices[i + edge];
+      const b = collapse.indices[i + (edge + 1) % 3];
+      assert.ok(a !== b && a < count && b < count);
+      const key = Math.min(a, b) * count + Math.max(a, b);
+      const record = edgeCounts.get(key) ?? [0, 0];
+      record[0]++;
+      record[1] += Math.sign(b - a);
+      edgeCounts.set(key, record);
+    }
+  }
+  assert.ok([...edgeCounts.values()].every(([uses, winding]) => uses === 2 && winding === 0));
+
+  const scale = firedScale(clayBodies.darkGranite);
+  const stl = await exportClayModel({ ...collapse, scale, format: 'stl' }).arrayBuffer();
+  const data = new DataView(stl);
+  const faces = data.getUint32(80, true);
+  assert.equal(faces, collapse.indices.length / 3);
+  let bottom = Infinity;
+  let top = 0;
+  for (let i = 0; i < faces; i++) {
+    for (let j = 0; j < 3; j++) {
+      const z = data.getFloat32(104 + i * 50 + j * 12, true);
+      bottom = Math.min(bottom, z);
+      top = Math.max(top, z);
+    }
+  }
+  assert.equal(bottom, 0);
+  assert.ok(Math.abs(top - collapse.size[2] * scale) < 0.0001);
+  assert.equal(makeClayMesh(model, { ...options, gravity: false }).collapse, undefined);
+});
+
 test('PSH Dark Granite uses the published total cone 6 shrinkage', () => {
   assert.equal(firedScale(clayBodies.darkGranite), 0.875);
 });
@@ -487,13 +534,14 @@ test('restores saved controls and uses Fast for a first visit', () => {
   assert.equal(settings.body, 'darkGranite');
   assert.equal(settings.finish, 'greenware');
   assert.equal(settings.renderQuality, 'low');
+  assert.equal(settings.fawnSource, 'preview');
   assert.equal(settings.fawnStage, 'pre-fired');
   assert.equal(settings.fawnFormat, 'stl');
   assert.equal(normalizeSettings({ fawnFormat: 'obj' }).fawnFormat, 'obj');
   const saved = {
     nozzle: 6, viscosity: 83, gravity: false, quality: 'accurate',
     body: 'm390', finish: 'fired', rendering: true, renderQuality: 'high', drafting: true, comparing: true,
-    fawnStage: 'fired', fawnFormat: 'step',
+    fawnSource: 'collapse', fawnStage: 'fired', fawnFormat: 'step',
   };
   assert.deepEqual(normalizeSettings(JSON.parse(JSON.stringify(saved))), saved);
   assert.deepEqual(normalizeSettings({ nozzle: 70, quality: 'other', body: '__proto__' }), settings);

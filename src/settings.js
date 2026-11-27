@@ -21,6 +21,7 @@ export function normalizeSettings(saved) {
     renderQuality: values.renderQuality === 'high' ? 'high' : 'low',
     drafting: values.drafting === true,
     comparing: values.comparing === true,
+    fawnSource: values.fawnSource === 'collapse' ? 'collapse' : 'preview',
     fawnStage: values.fawnStage === 'fired' ? 'fired' : 'pre-fired',
     fawnFormat: ['step', 'obj'].includes(values.fawnFormat) ? values.fawnFormat : 'stl',
   };

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { writeRingCap } from './bead-mesh.js';
 import { depositedIndexCount } from './toolpath.js';
 
 export const vicColors = ['#799b93', '#f5c451', '#ff743f', '#f73564'];
@@ -265,11 +266,8 @@ export function createVicDisplay() {
         const after = original[start + 2];
         const sides = stripLength / 6;
         target.array.fill(before, start, start + stripLength);
-        let face = start;
-        for (let j = 1; j < sides - 1; j++) {
-          target.array.set([before, before + j, before + j + 1, after, after + j + 1, after + j], face);
-          face += 6;
-        }
+        const next = writeRingCap(target.array, start, before, sides, false);
+        writeRingCap(target.array, next, after, sides, true);
       }
       else if (frame < at && lastFrame >= at) target.array.set(original.subarray(start, start + stripLength), start);
     }

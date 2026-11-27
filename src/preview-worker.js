@@ -12,6 +12,7 @@ self.addEventListener('message', ({ data }) => {
     const mesh = makeClayMesh(next, settings);
     model = next;
     const transfers = [mesh.positions.buffer, mesh.indices.buffer];
+    if (mesh.collapse) transfers.push(mesh.collapse.positions.buffer, mesh.collapse.indices.buffer);
     if (mesh.replay) transfers.push(mesh.replay.times.buffer, mesh.replay.indexEnds.buffer);
     if (mesh.analysis) {
       const { nodeIds, cuts, votes, trajectory, sections, centers, tangents, failure, times } = mesh.analysis;

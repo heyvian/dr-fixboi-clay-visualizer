@@ -1,7 +1,9 @@
 import { solveBeadFlow } from './bead-flow.js';
+import { writeBeadStrip } from './bead-mesh.js';
 import { estimateBedGap } from './gcode.js';
 import { defaultNozzle } from './settings.js';
 import { simulateVic } from './vic.js';
+import { bakeVicCollapse } from './vic-mesh.js';
 
 const maximumRings = 150_000;
 const maximumRingVertices = 1_800_000;
@@ -276,6 +278,7 @@ export function makeClayMesh(model, options) {
   const indexEnds = new Uint32Array(segments + caps);
   const analysis = vic ? simulateVic(paths, { diameter, stiffness: 1 - softness, gravity: options.gravity }) : undefined;
   const nodeIds = vic ? new Float32Array(positions.length / 3) : undefined;
+  const collapseStrips = analysis?.firstFailure < analysis?.frames ? [] : undefined;
   const cuts = [];
   let nodeIndex = 0;
   // A rounded rectangle gives adjacent layers wider contact than a round tube.
@@ -350,19 +353,17 @@ export function makeClayMesh(model, options) {
     // Keep triangles in print order, including the caps, for range-based playback.
     const endRing = vertex - sides;
     if (!closed) addCap(path[0], startRing, true, firstNode, edgeAreas?.[0], times[1]);
+    const firstStrip = face;
     const joins = closed ? path.length : path.length - 1;
     for (let i = 0; i < joins; i++) {
       const ring = startRing + i * sides;
       const following = startRing + ((i + 1) % path.length) * sides;
       const tear = analysis?.tears?.[firstNode + i];
       if (tear) cuts.push(face, tear);
-      for (let j = 0; j < sides; j++) {
-        const next = (j + 1) % sides;
-        indices.set([ring + j, ring + next, following + j, ring + next, following + next, following + j], face);
-        face += 6;
-      }
+      face = writeBeadStrip(indices, face, ring, following, sides);
       record(times[i + 1] ?? endTime);
     }
+    collapseStrips?.push(firstStrip, face);
     if (!closed) addCap(path.at(-1), endRing, false, nodeIndex - 1, edgeAreas?.at(-1), endTime);
   }
 
@@ -387,5 +388,6 @@ export function makeClayMesh(model, options) {
   const replay = Number.isFinite(end) && end > start
     ? { start, duration: end - start, times: replayTimes, indexEnds, origin, nozzleLift: lift + 2 * beadHeight, diameter }
     : undefined;
-  return { positions, indices, analysis, replay };
+  const mesh = { positions, indices, analysis, replay };
+  return collapseStrips ? { ...mesh, collapse: bakeVicCollapse(mesh, collapseStrips) } : mesh;
 }

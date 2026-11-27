@@ -649,9 +649,13 @@ a:hover { color: #291437; }
 .size-comparison tr.current-stage { background: #f0e6fb; }
 .size-overlay { width: fit-content; margin-top: .55rem; }
 .fawn-bar { background: var(--lavender); }
+.fawn-body { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .fawn-name { grid-column: 1 / -1; margin: 0; font: 500 .875rem/1.4 var(--mono); }
 .fawn-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .fawn-body legend { padding: 0; }
+.fawn-body .quality-choices span { height: 100%; align-content: center; }
+.fawn-body label:has(input:disabled) { cursor: not-allowed; }
+.fawn-body input:disabled + span { background: #eee6f5; color: #6e5b7c; }
 .fawn-formats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .fawn-download p { margin: .52rem 0; font: 500 .82rem var(--mono); }
 .fawn-download #fawn-status { color: #614872; margin-bottom: 0; }

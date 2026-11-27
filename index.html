@@ -7,8 +7,8 @@
     <meta name="description" content="Preview clay 3D printing G-code and see how nozzle size, viscosity, and gravity could shape your vessel.">
     <link rel="icon" type="image/png" href="./pages-assets/favicon-C7sSY8YA.png">
     <title>Dr. FixBoi®’s Clay Visualizer</title>
-    <script type="module" crossorigin src="./pages-assets/index-BWrsZLtC.js"></script>
-    <link rel="stylesheet" crossorigin href="./pages-assets/index-fUS6nBTi.css">
+    <script type="module" crossorigin src="./pages-assets/index-ZE1OFrLB.js"></script>
+    <link rel="stylesheet" crossorigin href="./pages-assets/index-DbGO_Hxs.css">
   </head>
   <body>
     <div class="top-bar">
@@ -233,6 +233,14 @@
         </div>
         <form id="fawn-form" class="render-body fawn-body">
           <p class="fawn-name"><strong>F</strong>orm <strong>A</strong>rchive for <strong>W</strong>orkshop <strong>N</strong>eeds</p>
+          <fieldset aria-describedby="fawn-source-note">
+            <legend class="setting-label">Geometry</legend>
+            <div class="quality-choices">
+              <label><input type="radio" name="fawnSource" value="preview" checked><span>Print preview</span></label>
+              <label><input type="radio" name="fawnSource" value="collapse" id="fawn-collapse" disabled><span>VIC collapse</span></label>
+            </div>
+            <p id="fawn-source-note" class="setting-note"></p>
+          </fieldset>
           <fieldset>
             <legend class="setting-label">Clay stage</legend>
             <div class="quality-choices">
@@ -275,7 +283,7 @@
         <p><strong>Inspect the shape.</strong> Drag to orbit, or use the arrow keys with the preview focused. Scroll or use the camera buttons to zoom. Turn on Dimensions to show length, width, and height.</p>
         <p><strong>Preview firing.</strong> Pick a clay body and switch between Greenware and Fired. Shrinkage overlay ghosts the as-printed vessel and shows both sets of dimensions.</p>
         <p><strong>Render the finish.</strong> Turn on Render to see the clay and canvas under studio lights. Choose Low or High for render quality. High adds softer shadows, accent lighting, and finer surface detail.</p>
-        <p><strong>Export with FAWN.</strong> Choose Pre-fired for the as-printed size or Fired to apply the selected clay body’s shrinkage. Choose STL for slicing, faceted STEP for compatible CAD apps, or OBJ for a textured mesh. Unzip the OBJ package and keep its material and PNG maps beside the model. Geometry uses millimeters, with the base at Z0.</p>
+        <p><strong>Export with FAWN.</strong> Choose Print preview or, when VIC predicts a collapse, choose VIC collapse for the final settled shape and its fallen pieces. Choose Pre-fired for the as-printed size or Fired to apply the selected clay body’s shrinkage. Choose STL for slicing, faceted STEP for compatible CAD apps, or OBJ for a textured mesh. Unzip the OBJ package and keep its material and PNG maps beside the model. Geometry uses millimeters, with the base at Z0.</p>
         <p>Your G-code stays on this device, and your browser remembers your settings.</p>
         <form method="dialog"><button type="submit" class="retro-button">Got it</button></form>
       </div>

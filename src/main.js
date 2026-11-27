@@ -210,6 +210,7 @@ if (viewer) {
 
     if (data.error) {
       updateStatus(data.error, !isLoad);
+      if (!isLoad) fawnPanel.clearCollapse();
       if (settings.quality === 'vic') vicPanel.error();
       if (!currentName) byId('model-stats').textContent = 'Open a G-code file';
     } else {
@@ -243,6 +244,7 @@ if (viewer) {
     upcoming = undefined;
     pendingSettings = false;
     clearTimeout(previewTimer);
+    fawnPanel.clearCollapse();
     if (settings.quality === 'vic') vicPanel.error();
     setFileBusy(false);
     updateStatus('The preview could not start. Reload the page and try again.');

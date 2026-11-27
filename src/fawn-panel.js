@@ -6,6 +6,8 @@ export function setupFawnPanel(settings) {
   const form = document.getElementById('fawn-form');
   const button = document.getElementById('fawn-download');
   const dimensions = document.getElementById('fawn-dimensions');
+  const collapse = document.getElementById('fawn-collapse');
+  const sourceNote = document.getElementById('fawn-source-note');
   const formatNote = document.getElementById('fawn-format-note');
   const status = document.getElementById('fawn-status');
   let current;
@@ -19,12 +21,24 @@ export function setupFawnPanel(settings) {
     return settings.fawnStage === 'fired' ? firedScale(clayBodies[settings.body]) : 1;
   }
 
+  function selectedMesh() {
+    return form.elements.fawnSource.value === 'collapse' ? current?.collapse : current;
+  }
+
   function refresh() {
-    button.disabled = !current || busy || exporting;
+    const vicEnabled = settings.quality === 'vic' && settings.gravity;
+    const available = vicEnabled && Boolean(current?.collapse);
+    collapse.disabled = !available || busy;
+    form.elements.fawnSource.value = available ? settings.fawnSource : 'preview';
+    sourceNote.textContent = !vicEnabled ? 'Turn on VIC and gravity to export a collapse.'
+      : busy ? 'Waiting for VIC…' : available ? 'Exports the settled shape and fallen pieces.'
+        : current ? 'VIC found no collapse to export.' : 'Load a print to run VIC.';
+    const mesh = selectedMesh();
+    button.disabled = !mesh || busy || exporting;
     const label = settings.fawnFormat === 'obj' ? 'OBJ ZIP' : settings.fawnFormat.toUpperCase();
     button.textContent = exporting ? 'Preparing file…' : 'Download ' + label;
-    dimensions.textContent = current
-      ? current.size.map(length => formatLength(length * scale())).join(' × ') + ' mm'
+    dimensions.textContent = mesh
+      ? mesh.size.map(length => formatLength(length * scale())).join(' × ') + ' mm'
       : 'Load a model to export.';
     const notes = {
       stl: 'Binary STL in millimeters. Merge intersecting beads in your slicer if needed.',
@@ -34,9 +48,10 @@ export function setupFawnPanel(settings) {
     formatNote.textContent = notes[settings.fawnFormat];
   }
 
-  form.addEventListener('change', () => {
+  form.addEventListener('change', event => {
     settings.fawnStage = form.elements.fawnStage.value;
     settings.fawnFormat = form.elements.fawnFormat.value;
+    if (event.target.name === 'fawnSource') settings.fawnSource = form.elements.fawnSource.value;
     status.textContent = '';
     saveSettings(settings);
     refresh();
@@ -46,10 +61,12 @@ export function setupFawnPanel(settings) {
   form.addEventListener('submit', event => {
     event.preventDefault();
     if (button.disabled) return;
-    const { positions, indices, name } = current;
+    const { positions, indices } = selectedMesh();
+    const { name } = current;
     const { fawnFormat: format, fawnStage: stage } = settings;
     const stem = name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9._-]+/gi, '-').slice(0, 96) || 'clay-model';
-    const filename = stem + '-' + stage + (format === 'obj' ? '-obj.zip' : '.' + format);
+    const variant = form.elements.fawnSource.value === 'collapse' ? '-vic-collapse' : '';
+    const filename = stem + variant + '-' + stage + (format === 'obj' ? '-obj.zip' : '.' + format);
     exporting = true;
     status.textContent = '';
     refresh();
@@ -89,13 +106,17 @@ export function setupFawnPanel(settings) {
 
   refresh();
   return {
-    setMesh({ positions, indices }, name, size) {
-      current = indices.length ? { positions, indices, name, size } : undefined;
+    setMesh({ positions, indices, collapse }, name, size) {
+      current = indices.length ? { positions, indices, collapse, name, size } : undefined;
       status.textContent = '';
       refresh();
     },
     setBusy(working) {
       busy = working;
+      refresh();
+    },
+    clearCollapse() {
+      if (current) current.collapse = undefined;
       refresh();
     },
   };
